@@ -27,6 +27,7 @@
   <nav class="nav">
     <a href="#" data-page="home">Play</a>
     <a href="#" data-page="servers">Servers</a>
+    <a href="#" data-page="packs">Texture packs</a>
     <a href="#" data-page="resources">Resources</a>
     <a href="#" data-page="myservers">My servers</a>
   </nav>
@@ -54,6 +55,14 @@
       <div class="page-h"><h1>Servers</h1><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="srvQ" placeholder="Search servers or game modes" spellcheck="false"></label></div>
       <a class="ad ad-wide" data-slot="0" hidden></a>
       <div class="rows" id="allServers"></div>
+    </section>
+
+    <!-- TEXTURE PACKS -->
+    <section class="page" id="p-packs">
+      <div class="page-h"><h1>Texture packs</h1><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="pkQ" placeholder="Search texture packs" spellcheck="false"></label></div>
+      <p class="news-sub" id="pkNote">Most downloaded first. Packs go into the version you play and are switched on for you.</p>
+      <div class="grid packs" id="pkList"></div>
+      <div class="pk-more"><button class="btn plain" id="pkMore" hidden>Show more</button><button class="btn plain" id="pkFolder">Open the pack folder</button></div>
     </section>
 
     <!-- RESOURCES -->
@@ -169,6 +178,21 @@
     <button data-f="all" class="on">All</button><button data-f="vanilla">Release</button><button data-f="optifine">OptiFine</button><button data-f="forge-optifine">ForgeOptiFine</button><button data-f="forge">Forge</button><button data-f="fabric">Fabric</button><button data-f="quilt">Quilt</button><button data-f="neoforge">NeoForge</button>
   </div>
   <div class="vlist" id="verList"></div>
+</div>
+
+<!-- update reminder -->
+<div class="upd" id="upd" hidden>
+  <div class="upd-box" role="dialog" aria-modal="true" aria-labelledby="updH">
+    <div class="upd-art"><img src="hero.webp" alt=""><img class="upd-logo" src="logo-white.svg" alt=""></div>
+    <div class="upd-tx">
+      <span class="upd-tag">Update available</span>
+      <h2 id="updH">CraftRank Launcher <b id="updVer"></b></h2>
+      <p class="upd-from">You have <span id="updCur"></span>. The new version is ready to download.</p>
+      <p class="upd-notes" id="updNotes"></p>
+      <div class="upd-btns"><button class="play upd-go" id="updGo"><span>Download update</span></button><button class="ghost" id="updLater">Remind me tomorrow</button></div>
+      <button class="upd-x" id="updX" aria-label="Close">×</button>
+    </div>
+  </div>
 </div>
 
 <div class="note" id="msg" hidden></div>

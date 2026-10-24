@@ -365,7 +365,7 @@ async function prepare(root, opts, progress) {
     const d = installDependenciesTask(resolved, DL);
     await d.startAndWait({ onUpdate() { if (d.total) progress('Downloading libraries', Math.round(d.progress / d.total * 100)); } });
   }
-  const instDir = path.join(root, 'instances', (opts.mc + '-' + loader).replace(/[^A-Za-z0-9._-]/g, '_'));
+  const instDir = instanceDir(root, opts.mc, loader);
   fs.mkdirSync(instDir, { recursive: true });
   if (loader === 'forge-optifine') {    // OptiFine runs as a Forge mod: keep exactly one OptiFine jar in mods
     const mods = path.join(instDir, 'mods'); fs.mkdirSync(mods, { recursive: true });
@@ -377,12 +377,66 @@ async function prepare(root, opts, progress) {
   return { id, java, instDir, pack };
 }
 
+/** The folder for one Minecraft version + loader: mods, worlds, settings and resource packs. */
+function instanceDir(root, mc, loader) {
+  return path.join(root, 'instances', (mc + '-' + (LOADERS.includes(loader) ? loader : 'vanilla')).replace(/[^A-Za-z0-9._-]/g, '_'));
+}
+
+/* ---------- texture packs from Modrinth, most downloaded first ---------- */
+async function searchPacks(q, mc, offset) {
+  const facets = [['project_type:resourcepack']];
+  if (mc) facets.push(['versions:' + mc]);
+  const u = 'https://api.modrinth.com/v2/search?index=downloads&limit=30&offset=' + (offset | 0) + '&facets=' + encodeURIComponent(JSON.stringify(facets)) + (q ? '&query=' + encodeURIComponent(q) : '');
+  const r = await getJson(u);
+  return { total: r.total_hits || 0, items: (r.hits || []).map((h) => ({ id: h.project_id, slug: h.slug, title: h.title, author: h.author, about: h.description, icon: h.icon_url || '', downloads: h.downloads || 0, url: 'https://modrinth.com/resourcepack/' + h.slug })) };
+}
+function packsDir(root, mc, loader) { return path.join(instanceDir(root, mc, loader), 'resourcepacks'); }
+function packState(root, mc, loader) {
+  const dir = packsDir(root, mc, loader), f = path.join(dir, '.craftrank-packs.json');
+  let st = {}; try { st = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) {}
+  for (const id of Object.keys(st)) if (!fs.existsSync(path.join(dir, st[id]))) delete st[id];
+  return { dir, file: f, st };
+}
+/** Downloads the newest file of a pack for this Minecraft version and switches it on in options.txt. */
+async function installPack(root, mc, loader, id) {
+  let list = await getJson('https://api.modrinth.com/v2/project/' + encodeURIComponent(id) + '/version?game_versions=' + encodeURIComponent(JSON.stringify([mc])));
+  let exact = true;
+  if (!list.length) { list = await getJson('https://api.modrinth.com/v2/project/' + encodeURIComponent(id) + '/version'); exact = false; }
+  if (!list.length) throw new Error('This pack has no files to download.');
+  const fl = list[0].files.find((x) => x.primary) || list[0].files[0];
+  const { dir, file, st } = packState(root, mc, loader);
+  const name = fl.filename.replace(/[\\/:*?"<>|]/g, '_');
+  await download(fl.url, path.join(dir, name));
+  st[id] = name; fs.writeFileSync(file, JSON.stringify(st));
+  setPackOn(instanceDir(root, mc, loader), name, true);
+  return { file: name, exact };
+}
+function removePack(root, mc, loader, id) {
+  const { dir, file, st } = packState(root, mc, loader);
+  if (st[id]) { setPackOn(instanceDir(root, mc, loader), st[id], false); try { fs.unlinkSync(path.join(dir, st[id])); } catch (e) {} delete st[id]; fs.writeFileSync(file, JSON.stringify(st)); }
+}
+/** options.txt keeps the list of switched-on packs: resourcePacks:["vanilla","file/x.zip"] */
+function setPackOn(inst, name, on) {
+  const opt = path.join(inst, 'options.txt');
+  let lines = []; try { lines = fs.readFileSync(opt, 'utf8').split(/\r?\n/); } catch (e) {}
+  let i = lines.findIndex((l) => l.startsWith('resourcePacks:'));
+  let packs = ['vanilla'];
+  if (i >= 0) { try { packs = JSON.parse(lines[i].slice('resourcePacks:'.length)); } catch (e) {} }
+  const key = 'file/' + name;
+  packs = packs.filter((p) => p !== key);
+  if (on) packs.push(key);
+  const line = 'resourcePacks:' + JSON.stringify(packs);
+  if (i >= 0) lines[i] = line; else lines.push(line);
+  fs.mkdirSync(inst, { recursive: true });
+  fs.writeFileSync(opt, lines.filter((l, k) => l !== '' || k < lines.length - 1).join('\n') + '\n');
+}
+
 /** Starts the game. account: {name, uuid, token, type}: 'msa' = Microsoft, 'mojang' = CraftRank profile (skin agent). */
 async function start(root, prep, account, opts) {
   const agent = opts.skinServer ? await ensureAgent(root) : null;
   const extraJVMArgs = [];
   if (agent) extraJVMArgs.push('-javaagent:' + agent + '=' + opts.skinServer, '-Dauthlibinjector.side=client');
-  return launch({
+  const proc = await launch({
     gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id,
     gameProfile: { name: account.name, id: account.uuid }, accessToken: account.token || account.uuid, userType: account.type || 'mojang',
     maxMemory: opts.memory, minMemory: Math.min(1024, opts.memory),
@@ -390,6 +444,8 @@ async function start(root, prep, account, opts) {
     extraJVMArgs, extraExecOption: { detached: false },
     server: opts.server && opts.server.host ? { ip: opts.server.host, port: opts.server.port || 25565 } : undefined,
   });
+  proc.skinsOff = !!opts.skinServer && !agent;
+  return proc;
 }
 
-module.exports = { PACKS, versionList, loaderVersions, catalog, optifineList, prepare, start, ensureJava, consoleJava, download, getJson, LOADERS };
+module.exports = { instanceDir, searchPacks, packState, installPack, removePack, PACKS, versionList, loaderVersions, catalog, optifineList, prepare, start, ensureJava, consoleJava, download, getJson, LOADERS };

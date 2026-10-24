@@ -187,7 +187,7 @@ ipcMain.handle('play', async (e, opts) => {
     const ram = Math.floor(os.totalmem() / 1048576), loader = opts.loader || s.loader || 'vanilla';
     const memory = Math.min(Math.max(s.memory, loader === 'vanilla' ? 1024 : 2048), Math.max(1024, Math.floor(ram * 0.6 / 512) * 512));
     running = await game.start(ROOT, prep, acct, { memory, server: opts.server, skinServer });
-    send('game', { running: true, note: prep.pack && prep.pack.reason ? prep.pack.reason : '' });
+    send('game', { running: true, note: running.skinsOff ? 'Skins are off this time: the skin helper could not be downloaded. Check your connection and start again.' : (prep.pack && prep.pack.reason ? prep.pack.reason : '') });
     let log = '';
     // Read everything the game prints. If one of its output pipes is never read, it fills up
     // (64 KB on Windows) and the game freezes the next time it writes a log line.
@@ -209,6 +209,13 @@ ipcMain.handle('play', async (e, opts) => {
     send('progress', null);
   }
 });
+
+/* texture packs (Modrinth), installed into the chosen version's own folder */
+const curVer = async (o) => { const s = readSettings(); return { mc: (o && o.mc) || s.mc || (await game.versionList()).latest.release, loader: (o && o.loader) || s.loader || 'vanilla' }; };
+ipcMain.handle('packs:search', safe(async (e, q, offset) => { const v = await curVer(); const r = await game.searchPacks(String(q || '').slice(0, 80), v.mc, offset); return Object.assign({ ok: true, mc: v.mc, loader: v.loader, installed: game.packState(ROOT, v.mc, v.loader).st }, r); }));
+ipcMain.handle('packs:install', safe(async (e, id) => { const v = await curVer(); const r = await game.installPack(ROOT, v.mc, v.loader, String(id)); return Object.assign({ ok: true }, r); }));
+ipcMain.handle('packs:remove', safe(async (e, id) => { const v = await curVer(); game.removePack(ROOT, v.mc, v.loader, String(id)); return { ok: true }; }));
+ipcMain.handle('packs:folder', async () => { const v = await curVer(); const d = game.packState(ROOT, v.mc, v.loader).dir; fs.mkdirSync(d, { recursive: true }); shell.openPath(d); });
 
 /* my servers */
 const sline = (id, line, stopped) => send('srv:line', { id, line, stopped: !!stopped });

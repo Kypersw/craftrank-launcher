@@ -3,6 +3,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nf = (n) => Number(n || 0).toLocaleString('en-US');
+const short = (n) => { n = Number(n || 0); return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n); };
 const KIND = { vanilla: ['Release', ''], optifine: ['OptiFine', 'of'], 'forge-optifine': ['ForgeOptiFine', 'fo'], forge: ['Forge', 'fg'], fabric: ['Fabric', 'fb'], quilt: ['Quilt', 'qt'], neoforge: ['NeoForge', 'nf'] };
 const state = { cfg: {}, feed: { servers: [], resources: [] }, versions: [], latest: null, settings: {}, me: null, store: { items: [] }, storeTab: 'all', running: false, ms: { list: [], sel: null, type: 'paper' } };
 
@@ -20,6 +21,7 @@ function go(page) {
   $$('.page').forEach((s) => s.classList.toggle('on', s.id === 'p-' + page));
   $$('.paper').forEach((p) => { p.scrollTop = 0; });
   if (page === 'myservers') loadServers();
+  if (page === 'packs') loadPacks(false);
   if (page === 'account') renderAccount();
 }
 let toastT;
@@ -157,7 +159,10 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#verPop
 /* ---------- play ---------- */
 async function play(server) {
   if (state.running) return;
-  const asCr = $('#useCr').checked && state.me;
+  // typing your own CraftRank name also means: play with my CraftRank skin
+  const typed = $('#barName').value.trim().toLowerCase();
+  const prof = state.me && state.me.profile;
+  const asCr = state.me && ($('#useCr').checked || (prof && typed !== '' && typed === String(prof.name).toLowerCase()));
   if (asCr && !state.me.profile) { showMsg('Pick your CraftRank in-game name first.'); go('account'); return; }
   const username = $('#barName').value.trim();
   if (!asCr && !/^[A-Za-z0-9_]{3,16}$/.test(username)) { showMsg('Type a username first: 3 to 16 letters, numbers or _.'); $('#barName').focus(); return; }
@@ -194,7 +199,7 @@ async function loadMe() {
   state.me = r.ok ? r : null;
   const pr = state.me && state.me.profile;
   $('#useCr').closest('.bchk').hidden = !pr;
-  $('#useCr').checked = !!(pr && state.settings.playAs === 'craftrank');
+  $('#useCr').checked = !!(pr && (state.settings.playAs === 'craftrank' || !state.settings.playAsChosen));
   const asCr = $('#useCr').checked;
   $('#acctTile').textContent = state.me ? (pr ? pr.name : state.me.user.name) : 'Sign in';
   $('#barName').hidden = asCr; $('#barSigned').hidden = !asCr;
@@ -203,7 +208,7 @@ async function loadMe() {
   drawHead($('#head'), asCr ? pr.skin : null, name);
   renderAds();
 }
-$('#useCr').addEventListener('change', async (e) => { state.settings = await cr.save({ playAs: e.target.checked ? 'craftrank' : 'offline' }); loadMe(); });
+$('#useCr').addEventListener('change', async (e) => { state.settings = await cr.save({ playAs: e.target.checked ? 'craftrank' : 'offline', playAsChosen: true }); loadMe(); });
 
 /* ---------- ads ---------- */
 function renderAds() {
@@ -315,6 +320,65 @@ function bindSettings(info) {
   $('#about').textContent = 'CraftRank Launcher ' + info.version + '. Game files are kept apart from your normal .minecraft folder.';
 }
 
+/* ---------- texture packs ---------- */
+const pk = { items: [], off: 0, total: 0, key: '', busy: false, installed: {} };
+let pkT;
+$('#pkQ').addEventListener('input', () => { clearTimeout(pkT); pkT = setTimeout(() => loadPacks(true), 350); });
+$('#pkMore').addEventListener('click', () => loadPacks(false, true));
+$('#pkFolder').addEventListener('click', () => cr.packs.folder());
+async function loadPacks(reset, more) {
+  const q = $('#pkQ').value.trim(), key = q + '|' + (state.settings.mc || '') + '|' + (state.settings.loader || '');
+  if (!reset && !more && pk.key === key && pk.items.length) return renderPacks();
+  if (pk.busy) return; pk.busy = true;
+  if (!more) { pk.items = []; pk.off = 0; $('#pkList').innerHTML = '<div class="empty" style="grid-column:1/-1">Loading texture packs…</div>'; }
+  const r = await cr.packs.search(q, pk.off);
+  pk.busy = false;
+  if (!r.ok) { $('#pkList').innerHTML = `<div class="empty" style="grid-column:1/-1">${esc(r.error || 'Could not load texture packs.')}</div>`; return; }
+  pk.key = key; pk.total = r.total; pk.installed = r.installed || {}; pk.items = pk.items.concat(r.items); pk.off = pk.items.length;
+  $('#pkNote').textContent = 'Most downloaded first, for ' + $('#verLabel').textContent + '. Packs go into this version and are switched on for you.';
+  renderPacks();
+}
+function renderPacks() {
+  $('#pkList').innerHTML = pk.items.map((p) => {
+    const has = !!pk.installed[p.id];
+    return `<div class="res"><span class="res-ic">${p.icon ? `<img src="${esc(p.icon)}" alt="">` : esc(p.title.slice(0, 2).toUpperCase())}</span>
+      <div><b>${esc(p.title)}</b><p>${esc(p.about)}</p><small class="res-meta">${esc(p.author)}<span>${short(p.downloads)} downloads</span></small>
+      <div class="pk-act"><a href="#" class="more" data-open="${esc(p.url)}">Details</a><button class="btn plain${has ? ' on' : ''}" data-pk="${esc(p.id)}">${has ? 'Installed' : 'Install'}</button></div></div></div>`;
+  }).join('') || '<div class="empty" style="grid-column:1/-1">No texture packs found for this version.</div>';
+  $('#pkMore').hidden = pk.items.length >= pk.total;
+}
+$('#pkList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-pk]'); if (!b) return;
+  const id = b.dataset.pk; b.disabled = true;
+  if (pk.installed[id]) {
+    b.textContent = 'Removing…'; const r = await cr.packs.remove(id); b.disabled = false;
+    if (!r.ok) return toast(r.error); delete pk.installed[id]; renderPacks(); toast('Pack removed.');
+  } else {
+    b.textContent = 'Installing…'; const r = await cr.packs.install(id); b.disabled = false;
+    if (!r.ok) { renderPacks(); return toast(r.error); }
+    pk.installed[id] = r.file; renderPacks();
+    toast(r.exact ? 'Installed and switched on. Start the game to see it.' : 'Installed. This pack was made for another version, it may look a little different.');
+  }
+});
+
+/* ---------- update reminder ---------- */
+const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+async function checkUpdate(info) {
+  const latest = state.cfg && state.cfg.latest, cur = info.version;
+  if (!latest || !newer(latest, cur)) return;
+  const snooze = state.settings.updSnooze || {};
+  $('.nav a[data-page="home"]').insertAdjacentHTML('beforeend', '<i class="nav-dot" title="Update available"></i>');
+  if (snooze.ver === latest && snooze.until > Date.now()) return;
+  $('#updVer').textContent = latest; $('#updCur').textContent = cur;
+  const n = await cr.news();
+  if (n && n.ok && n.title && n.title.includes(latest)) $('#updNotes').textContent = n.body || '';
+  $('#upd').hidden = false;
+  const url = state.cfg.download || 'https://craftrank.org/launcher';
+  $('#updGo').onclick = () => { cr.open(url); $('#upd').hidden = true; toast('The download opened in your browser. Close the launcher and open the new file.'); };
+  const later = async () => { $('#upd').hidden = true; state.settings = await cr.save({ updSnooze: { ver: latest, until: Date.now() + 24 * 3600 * 1000 } }); };
+  $('#updLater').onclick = later; $('#updX').onclick = later;
+}
+
 async function refreshAll() {
   const f = await cr.feed();
   if (!f.offline || !state.feed.servers.length) state.feed = f;
@@ -342,5 +406,6 @@ async function refreshAll() {
   await Promise.race([loadNews(), new Promise((ok) => setTimeout(ok, 2500))]);
   idleStatus();
   boot(100, 'Ready');
+  setTimeout(() => checkUpdate(info), 1500);
   setInterval(async () => { const f = await cr.feed(); if (!f.offline) { state.feed = f; renderServers(); renderResources(); renderAds(); } }, 5 * 60 * 1000);
 })();
