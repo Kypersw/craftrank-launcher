@@ -81,7 +81,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           t="${{ steps.ver.outputs.tag }}"
-          gh release view "$t" >/dev/null 2>&1 || gh release create "$t" --target "$GITHUB_SHA" --title "CraftRank Launcher ${t#v}" --notes "Download **CraftRank-Launcher.exe** (no install needed) or **CraftRank-Launcher-Setup.exe** (installer). More on https://craftrank.org/launcher"
+          notes="Download CraftRank-Launcher.exe (no install needed) or CraftRank-Launcher-Setup.exe (installer). More on https://craftrank.org/launcher"
+          # release-notes.md (one short paragraph) is shown as "Last update" in the launcher
+          if [ -s release-notes.md ]; then notes="$(cat release-notes.md)"$'\n\n'"$notes"; fi
+          gh release view "$t" >/dev/null 2>&1 || gh release create "$t" --target "$GITHUB_SHA" --title "CraftRank Launcher ${t#v}" --notes "$notes"
           gh release upload "$t" dist/CraftRank-Launcher.exe dist/CraftRank-Launcher-Setup.exe dist/SHA256SUMS.txt --clobber
 
       - name: Keep the files (manual runs)

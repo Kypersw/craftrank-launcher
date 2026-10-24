@@ -9,11 +9,14 @@ const state = { cfg: {}, feed: { servers: [], resources: [] }, versions: [], lat
 /* ---------- basics ---------- */
 $$('[data-win]').forEach((b) => b.addEventListener('click', () => cr.win(b.dataset.win)));
 document.addEventListener('click', (e) => {
-  const p = e.target.closest('[data-page]'); if (p) { e.preventDefault(); go(p.dataset.page); return; }
+  const p = e.target.closest('[data-page]:not(body)'); if (p) { e.preventDefault(); go(p.dataset.page); return; }
   const o = e.target.closest('[data-open]'); if (o) { e.preventDefault(); cr.open(o.dataset.open); }
 });
 function go(page) {
-  $$('.side .tile[data-page]').forEach((a) => a.classList.toggle('on', a.dataset.page === page && page !== 'home'));
+  document.body.dataset.page = page;
+  $$('.nav a[data-page]').forEach((a) => a.classList.toggle('on', a.dataset.page === page));
+  $('.top-ic .acct').classList.toggle('on', page === 'account');
+  $('#verPop').hidden = true;
   $$('.page').forEach((s) => s.classList.toggle('on', s.id === 'p-' + page));
   $$('.paper').forEach((p) => { p.scrollTop = 0; });
   if (page === 'myservers') loadServers();
@@ -66,9 +69,8 @@ function serverRow(s) {
   </article>`;
 }
 function renderServers() {
-  $('#recRows').innerHTML = state.feed.servers.slice(0, 3).map((s) => `<div class="rec-row" data-join="${s.id}" title="Join ${esc(s.name)}"><span><b>${esc(s.name)}</b>${(s.tags || []).length ? ': ' + esc(s.tags.slice(0, 3).join(', ')) : ''}${s.online ? ', ' + nf(s.players) + ' online' : ''}</span><code>${esc(s.address)}</code></div>`).join('');
-  $('#rec').hidden = !state.feed.servers.length;
-  $('#homeServers').innerHTML = state.feed.servers.slice(0, 6).map(serverRow).join('') || '<div class="empty">No servers to show right now.</div>';
+  $('#onlineN').textContent = nf(state.feed.servers.reduce((n, s) => n + (s.online ? +s.players || 0 : 0), 0));
+  $('#homeServers').innerHTML = state.feed.servers.slice(0, 3).map(serverRow).join('') || '<div class="empty">No servers to show right now.</div>';
   const q = $('#srvQ').value.trim().toLowerCase();
   const list = state.feed.servers.filter((s) => !q || (s.name + ' ' + s.address + ' ' + (s.tags || []).join(' ') + ' ' + s.motd).toLowerCase().includes(q));
   $('#allServers').innerHTML = list.map(serverRow).join('') || `<div class="empty">${q ? 'No server matches “' + esc(q) + '”.' : 'No servers to show right now.'}</div>`;
@@ -94,9 +96,29 @@ $('#resQ').addEventListener('input', renderResources);
 // One list like other launchers: "Release 1.21.1", "OptiFine 1.21.1", "ForgeOptiFine 1.20.1", "Fabric 1.21.1"…
 let verFilter = 'all';
 state.catalog = {};
+/* ---------- status line ---------- */
+function idleStatus() {
+  if (state.running) return;
+  $('#prog').classList.add('idle'); $('#progI').style.width = '';
+  $('#stLeft').textContent = 'Ready to play';
+  $('#stRight').textContent = $('#verLabel').textContent.toUpperCase();
+}
+
+/* ---------- last update: the newest launcher release on GitHub ---------- */
+async function loadNews() {
+  const r = await cr.news();
+  if (!r || !r.ok) return;
+  $('#newsTitle').textContent = r.title;
+  $('#newsDate').textContent = r.date ? new Date(r.date).toLocaleDateString('en-GB').replace(/\//g, '.') : '';
+  if (r.body) $('#newsBody').textContent = r.body;
+  $('#newsMore').onclick = () => cr.open(r.url);
+}
+$('#newsMore').onclick = () => cr.open('https://github.com/Kypersw/craftrank-launcher/releases');
+
 function verLabel() {
   const s = state.settings, mc = s.mc || (state.latest && state.latest.release) || '';
   $('#verLabel').textContent = mc ? KIND[s.loader || 'vanilla'][0] + ' ' + mc : 'Loading versions…';
+  idleStatus();
 }
 function entries() {
   const types = ['release'].concat(state.settings.showSnapshots ? ['snapshot'] : [], state.settings.showOld ? ['old_beta', 'old_alpha'] : []);
@@ -126,7 +148,7 @@ $('#verFil').addEventListener('click', (e) => { const b = e.target.closest('[dat
 $('#verQ').addEventListener('input', renderVerList);
 $('#verBtn').addEventListener('click', () => {
   const p = $('#verPop'); p.hidden = !p.hidden; if (p.hidden) return;
-  const r = $('#verBtn').getBoundingClientRect(); p.style.left = Math.min(r.left, innerWidth - 370) + 'px';
+  const r = $('#verBtn').getBoundingClientRect(); p.style.left = Math.min(r.left, innerWidth - 390) + 'px'; p.style.bottom = (innerHeight - r.top + 12) + 'px';
   renderVerList(); $('#verQ').focus();
 });
 document.addEventListener('mousedown', (e) => { const p = $('#verPop'); if (!p.hidden && !p.contains(e.target) && !e.target.closest('#verBtn')) p.hidden = true; });
@@ -147,13 +169,17 @@ async function play(server) {
 }
 $('#play').addEventListener('click', () => play(null));
 cr.on('progress', (p) => {
-  $('#prog').hidden = !p;
-  if (!p) { if (!state.running) $('#progT').textContent = ''; return; }
-  $('#progT').textContent = p.stage + ' · ' + (p.pct || 0) + '%'; $('#progI').style.width = (p.pct || 0) + '%';
+  if (!p) { idleStatus(); return; }
+  const parts = String(p.stage).split(' · ');
+  $('#prog').classList.remove('idle');
+  $('#stLeft').textContent = parts[0] + '…';
+  $('#stRight').textContent = (parts.slice(1).join(' · ') ? parts.slice(1).join(' · ').toUpperCase() + '  ' : '') + (p.pct || 0) + '%';
+  $('#progI').style.width = (p.pct || 0) + '%';
 });
 cr.on('game', (g) => {
   state.running = g.running; $('#play').disabled = g.running;
-  $('#play span').textContent = g.running ? 'Playing' : 'Enter the game'; $('#progT').textContent = '';
+  $('#play span').textContent = g.running ? 'Playing' : 'Start to play';
+  if (g.running) { $('#stLeft').textContent = 'Minecraft is running'; $('#stRight').textContent = ''; $('#prog').classList.add('idle'); $('#progI').style.width = ''; } else idleStatus();
   if (g.running && g.note) toast(g.note);
   if (!g.running && g.code) {
     const lines = (g.log || '').split('\n').map((l) => l.trim()).filter(Boolean);
@@ -170,7 +196,7 @@ async function loadMe() {
   $('#useCr').closest('.bchk').hidden = !pr;
   $('#useCr').checked = !!(pr && state.settings.playAs === 'craftrank');
   const asCr = $('#useCr').checked;
-  $('#acctTile').textContent = state.me ? (pr ? pr.name : state.me.user.name) : 'Skin and account';
+  $('#acctTile').textContent = state.me ? (pr ? pr.name : state.me.user.name) : 'Sign in';
   $('#barName').hidden = asCr; $('#barSigned').hidden = !asCr;
   const name = asCr ? pr.name : ($('#barName').value.trim() || 'Steve');
   $('#barSigned').textContent = name;
@@ -279,8 +305,7 @@ function bindSettings(info) {
   $('#setOld').addEventListener('change', async (e) => { state.settings = await cr.save({ showOld: e.target.checked }); });
   $('#setPerf').addEventListener('change', async (e) => { state.settings = await cr.save({ pack: e.target.checked ? 'perf' : 'none' }); });
   $('#tbVer').textContent = info.version;
-  if (s.tipClosed) $('#tip').hidden = true;
-  $('#tipX').addEventListener('click', () => { $('#tip').hidden = true; cr.save({ tipClosed: true }); });
+  $('#ghTile').addEventListener('click', () => cr.open('https://github.com/Kypersw/craftrank-launcher'));
   $('#openFolder2').addEventListener('click', () => cr.folder());
   $('#siteTile').addEventListener('click', () => cr.open(info.site));
   $('#reload').addEventListener('click', refreshAll);
@@ -298,15 +323,24 @@ async function refreshAll() {
   cr.catalog().then((c) => { if (c.ok) { state.catalog = c.data; if (!$('#verPop').hidden) renderVerList(); } });
 }
 (async function init() {
+  const boot = (p, t) => { try { cr.boot(p, t); } catch (e) {} };
+  boot(10, 'Starting the launcher…');
   const [s, info] = await Promise.all([cr.settings(), cr.info()]);
   state.settings = s; bindSettings(info);
+  boot(25, 'Loading Minecraft versions…');
   cr.versions().then((v) => {
     if (!v.ok) { $('#verLabel').textContent = 'Offline'; return; }
     state.versions = v.versions; state.latest = v.latest;
     verLabel();
   });
   const cfg = await cr.config(); state.cfg = cfg.ok ? cfg : {};
+  boot(55, 'Loading servers from CraftRank…');
   await refreshAll();
+  boot(80, 'Loading your profile…');
   await loadMe();
+  boot(92, 'Almost ready…');
+  await Promise.race([loadNews(), new Promise((ok) => setTimeout(ok, 2500))]);
+  idleStatus();
+  boot(100, 'Ready');
   setInterval(async () => { const f = await cr.feed(); if (!f.offline) { state.feed = f; renderServers(); renderResources(); renderAds(); } }, 5 * 60 * 1000);
 })();

@@ -1,5 +1,5 @@
 // CraftRank Launcher: main process.
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, net } = require('electron');
 app.setName('CraftRank Launcher');
 if (process.platform === 'win32') app.setAppUserModelId('org.craftrank.launcher');
 const path = require('path');
@@ -67,26 +67,61 @@ function friendly(err) {
 }
 const safe = (fn) => async (...a) => { try { return await fn(...a); } catch (err) { console.error(err); return { ok: false, error: friendly(err) }; } };
 
+let splash = null;
 function createWindow() {
+  // a small loading window first, while the launcher reads versions and servers
+  splash = new BrowserWindow({
+    width: 440, height: 620, frame: false, transparent: true, resizable: false, maximizable: false, show: false, center: true, skipTaskbar: false,
+    backgroundColor: '#00000000', icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'), title: 'CraftRank Launcher',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  splash.loadFile(path.join(__dirname, 'ui', 'splash.html'));
+  splash.once('ready-to-show', () => splash.show());
+  splash.on('closed', () => { splash = null; });
+
+  // the main window is see-through around the panel, so the character can stand over its edge
   win = new BrowserWindow({
-    width: 1240, height: 780, minWidth: 1000, minHeight: 640,
-    backgroundColor: '#000000', frame: false, show: false,
+    width: 1320, height: 800, frame: false, transparent: true, resizable: false, maximizable: false, fullscreenable: false, show: false, center: true,
+    backgroundColor: '#00000000', hasShadow: false,
     icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     title: 'CraftRank Launcher',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
-  win.once('ready-to-show', () => win.show());
+  // shown when the page says it is ready (or after 20 s, whatever happens)
+  const fallback = setTimeout(showMain, 20000);
+  win.once('show', () => clearTimeout(fallback));
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file://')) { e.preventDefault(); if (/^https?:\/\//.test(url)) shell.openExternal(url); } });
 }
+function showMain() {
+  if (!win || win.isDestroyed() || win.isVisible()) return;
+  win.show(); win.focus();
+  if (splash && !splash.isDestroyed()) setTimeout(() => { if (splash && !splash.isDestroyed()) splash.close(); }, 120);
+}
+ipcMain.on('boot', (e, pct, text) => {
+  if (splash && !splash.isDestroyed()) splash.webContents.send('boot', { pct, text });
+  if (pct >= 100) setTimeout(showMain, 350);
+});
+// "Last update" on the home screen: the newest launcher release on GitHub
+ipcMain.handle('news', async () => {
+  try {
+    const r = await net.fetch('https://api.github.com/repos/Kypersw/craftrank-launcher/releases/latest', { headers: { 'User-Agent': 'CraftRankLauncher', Accept: 'application/vnd.github+json' } });
+    if (!r.ok) return { ok: false };
+    const j = await r.json();
+    const body = String(j.body || '').split(/\r?\n\s*\r?\n/)[0].replace(/\*\*|__|`|#+ |\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
+    return { ok: true, title: j.name || j.tag_name || 'CraftRank Launcher', date: j.published_at || '', body, url: j.html_url };
+  } catch (e) { return { ok: false }; }
+});
 app.setName('CraftRank Launcher');
 if (process.platform === 'win32') app.setAppUserModelId('org.craftrank.launcher');   // taskbar groups it as CraftRank, with its icon
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { servers.stopAll(); app.quit(); });
+// closing the loading window before the launcher opens quits too
+app.on('browser-window-created', (e, w) => w.on('closed', () => { if (w === splash && win && !win.isDestroyed() && !win.isVisible()) app.quit(); }));
 
 /* window and settings */
-ipcMain.handle('win', (e, a) => { if (a === 'min') win.minimize(); else if (a === 'max') win.isMaximized() ? win.unmaximize() : win.maximize(); else if (a === 'close') win.close(); });
+ipcMain.handle('win', (e, a) => { const w = BrowserWindow.fromWebContents(e.sender) || win; if (a === 'min') w.minimize(); else if (a === 'close') w.close(); });
 ipcMain.handle('open', (e, url) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); });
 ipcMain.handle('settings:get', () => readSettings());
 ipcMain.handle('settings:set', (e, s) => { const cur = Object.assign(readSettings(), s); writeSettings(cur); return cur; });

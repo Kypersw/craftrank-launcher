@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
+<title>CraftRank Launcher</title>
+<style>
+@font-face { font-family: Cond; src: url(fonts/barlow-condensed-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+@font-face { font-family: Cond; src: url(fonts/barlow-condensed-latin-600-normal.woff2) format("woff2"); font-weight: 600; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; user-select: none; }
+.sp { position: absolute; inset: 14px; display: grid; grid-template-rows: auto 1fr auto; justify-items: center; padding: 26px 26px 30px; border-radius: 6px; overflow: hidden; isolation: isolate;
+  background: #131416; box-shadow: 0 24px 50px -18px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.04); color: #c9cdd2; font: 500 14px Cond, sans-serif; -webkit-app-region: drag; }
+.sp::before { content: ""; position: absolute; inset: 0; z-index: -1; background: url(hero.webp) 55% 30% / cover; filter: grayscale(1) contrast(1.15); opacity: .08; }
+.top { justify-self: end; display: flex; gap: 2px; -webkit-app-region: no-drag; }
+.top button { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 4px; background: none; color: #878c93; cursor: pointer; }
+.top button:hover { color: #fff; background: rgba(255,255,255,.06); }
+.top button.x:hover { background: #c42b1c; }
+.top svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.mid { display: grid; justify-items: center; align-content: start; gap: 18px; padding-top: 34px; text-align: center; }
+.mid img { width: 250px; }
+.mid p { margin: 0; max-width: 30ch; color: #878c93; font-size: 15px; line-height: 1.35; letter-spacing: .02em; }
+.ring { position: relative; width: 104px; height: 104px; margin-top: 56px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 3; }
+.ring .bg { stroke: rgba(255,255,255,.07); }
+.ring .fg { stroke: #f3f4f5; stroke-linecap: round; stroke-dasharray: 289; stroke-dashoffset: 289; transition: stroke-dashoffset .5s cubic-bezier(.16,1,.3,1); }
+.ring b { position: absolute; inset: 0; display: grid; place-items: center; color: #f3f4f5; font: 600 22px Cond, sans-serif; letter-spacing: .02em; }
+#t { margin-top: 22px; color: #f3f4f5; font-size: 15px; letter-spacing: .03em; }
+.foot { color: #5d6168; font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="sp">
+  <div class="top"><button data-win="min" aria-label="Minimize"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button><button data-win="close" class="x" aria-label="Close"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div class="mid">
+    <img src="logo-white.svg" alt="CraftRank">
+    <p>Free Minecraft launcher. Every version, every loader, every server on CraftRank.</p>
+    <div class="ring"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="46"/><circle class="fg" id="fg" cx="50" cy="50" r="46"/></svg><b id="pc">0 %</b></div>
+    <div id="t">Starting the launcher…</div>
+  </div>
+  <div class="foot">Free and open source</div>
+</div>
+<script src="splash.js"></script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+A new look: a dark, textured window with the CraftRank character beside it, a loading screen with progress, and the newest launcher news on the home screen. Big Start to play button, players online, and a clean status line with megabytes and speed while Minecraft downloads.
