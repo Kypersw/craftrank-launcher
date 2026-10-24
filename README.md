@@ -1,0 +1,23 @@
+# CraftRank Launcher
+
+A free Minecraft launcher for Windows, made for [craftrank.org](https://craftrank.org).
+
+- Every Minecraft version, plus OptiFine, ForgeOptiFine, Forge, Fabric, Quilt and NeoForge in one click
+- Join servers from the CraftRank list with one click
+- Fast downloads checked against Mojang's hashes
+- Run your own Paper, Purpur, Vanilla, BungeeCord or Velocity server
+
+Download: [craftrank.org/launcher](https://craftrank.org/launcher) or the [latest release](../../releases/latest).
+
+## Releases
+
+Publishing a GitHub release with a tag like `v1.3.4` builds the Windows files with GitHub Actions
+(`.github/workflows/release.yml`) and attaches them to the release:
+`CraftRank-Launcher.exe` (portable), `CraftRank-Launcher-Setup.exe` (installer) and `SHA256SUMS.txt`.
+
+## Development
+
+```
+npm ci
+npm start
+```

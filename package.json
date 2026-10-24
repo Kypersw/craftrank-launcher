@@ -1,0 +1,72 @@
+{
+  "name": "craftrank-launcher",
+  "productName": "CraftRank Launcher",
+  "version": "1.3.3",
+  "description": "CraftRank Launcher",
+  "main": "src/main.js",
+  "author": "CraftRank",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
+  },
+  "dependencies": {
+    "@xmcl/core": "2.13.0",
+    "@xmcl/installer": "5.4.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "pe-library": "^1.0.1",
+    "resedit": "^2.0.3"
+  },
+  "build": {
+    "appId": "org.craftrank.launcher",
+    "productName": "CraftRank Launcher",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "executableName": "CraftRank Launcher",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "CraftRank-Launcher-Setup-${version}.exe",
+      "shortcutName": "CraftRank Launcher",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "createDesktopShortcut": true
+    },
+    "portable": {
+      "artifactName": "CraftRank-Launcher-${version}.exe"
+    },
+    "copyright": "CraftRank",
+    "afterPack": "build/afterPack.js",
+    "electronLanguages": [
+      "en-US",
+      "tr"
+    ],
+    "compression": "maximum"
+  }
+}
