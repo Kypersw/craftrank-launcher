@@ -1,0 +1,69 @@
+# Builds the Windows launcher on GitHub and publishes it as a release.
+# Push a tag like v1.3.4 (or publish a release with that tag on GitHub) and this runs by itself;
+# a few minutes later the release has CraftRank-Launcher.exe (portable),
+# CraftRank-Launcher-Setup.exe (installer) and SHA256SUMS.txt.
+name: Build launcher
+
+on:
+  push:
+    tags: ['v*']
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Take the version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          npm version "$v" --no-git-tag-version --allow-same-version
+
+      - run: npm ci
+
+      - name: Build portable and installer
+        run: npx electron-builder --win portable nsis --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Name the files
+        shell: bash
+        run: |
+          cd dist
+          v=$(node -p "require('../package.json').version")
+          cp "CraftRank-Launcher-$v.exe" CraftRank-Launcher.exe
+          cp "CraftRank-Launcher-Setup-$v.exe" CraftRank-Launcher-Setup.exe
+          sha256sum CraftRank-Launcher.exe CraftRank-Launcher-Setup.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "CraftRank Launcher ${GITHUB_REF_NAME#v}" --notes "Download **CraftRank-Launcher.exe** (no install needed) or **CraftRank-Launcher-Setup.exe** (installer). More on https://craftrank.org/launcher"
+          gh release upload "$GITHUB_REF_NAME" dist/CraftRank-Launcher.exe dist/CraftRank-Launcher-Setup.exe dist/SHA256SUMS.txt --clobber
+
+      - name: Keep the files (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: craftrank-launcher
+          path: |
+            dist/CraftRank-Launcher.exe
+            dist/CraftRank-Launcher-Setup.exe
+            dist/SHA256SUMS.txt
