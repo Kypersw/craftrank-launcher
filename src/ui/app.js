@@ -312,6 +312,7 @@ function bindSettings(info) {
   $('#tbVer').textContent = info.version;
   $('#ghTile').addEventListener('click', () => cr.open('https://github.com/Kypersw/craftrank-launcher'));
   $('#openFolder2').addEventListener('click', () => cr.folder());
+  state.site = info.site;
   $('#siteTile').addEventListener('click', () => cr.open(info.site));
   $('#reload').addEventListener('click', refreshAll);
   $('#barName').addEventListener('input', (e) => { const v = e.target.value.trim(); if (/^[A-Za-z0-9_]{3,16}$/.test(v)) { cr.save({ username: v }); drawHead($('#head'), null, v); } });
@@ -343,7 +344,7 @@ function renderPacks() {
     const has = !!pk.installed[p.id];
     return `<div class="res"><span class="res-ic">${p.icon ? `<img src="${esc(p.icon)}" alt="">` : esc(p.title.slice(0, 2).toUpperCase())}</span>
       <div><b>${esc(p.title)}</b><p>${esc(p.about)}</p><small class="res-meta">${esc(p.author)}<span>${short(p.downloads)} downloads</span></small>
-      <div class="pk-act"><a href="#" class="more" data-open="${esc(p.url)}">Details</a><button class="btn plain${has ? ' on' : ''}" data-pk="${esc(p.id)}">${has ? 'Installed' : 'Install'}</button></div></div></div>`;
+      <div class="pk-act"><a href="#" class="more" data-open="${esc((state.site || 'https://craftrank.org') + '/resource-go.php?modrinth=' + encodeURIComponent(p.id))}">Details</a><button class="btn plain${has ? ' on' : ''}" data-pk="${esc(p.id)}">${has ? 'Installed' : 'Install'}</button></div></div></div>`;
   }).join('') || '<div class="empty" style="grid-column:1/-1">No texture packs found for this version.</div>';
   $('#pkMore').hidden = pk.items.length >= pk.total;
 }
