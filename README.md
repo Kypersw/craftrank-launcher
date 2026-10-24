@@ -21,3 +21,12 @@ Raising the version in `package.json` and pushing to `main` (or pushing a tag li
 npm ci
 npm start
 ```
+
+## Contributing
+
+Bug reports and pull requests are welcome. Open an issue first for bigger changes.
+
+## License
+
+[MIT](LICENSE). Minecraft is a trademark of Mojang AB; this launcher is not affiliated with Mojang or Microsoft.
+OptiFine is downloaded from optifine.net on the player's PC and is not part of this repository.
