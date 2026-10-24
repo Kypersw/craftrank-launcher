@@ -11,7 +11,7 @@ Download: [craftrank.org/launcher](https://craftrank.org/launcher) or the [lates
 
 ## Releases
 
-Publishing a GitHub release with a tag like `v1.3.4` builds the Windows files with GitHub Actions
+Raising the version in `package.json` and pushing to `main` (or pushing a tag like `v1.3.4`) builds the Windows files with GitHub Actions
 (`.github/workflows/release.yml`) and attaches them to the release:
 `CraftRank-Launcher.exe` (portable), `CraftRank-Launcher-Setup.exe` (installer) and `SHA256SUMS.txt`.
 
