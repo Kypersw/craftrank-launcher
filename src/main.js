@@ -122,9 +122,22 @@ app.on('browser-window-created', (e, w) => w.on('closed', () => { if (w === spla
 
 /* window and settings */
 ipcMain.handle('win', (e, a) => { const w = BrowserWindow.fromWebContents(e.sender) || win; if (a === 'min') w.minimize(); else if (a === 'close') w.close(); });
-ipcMain.handle('open', (e, url) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); });
+ipcMain.handle('open', (e, url) => { if (typeof url === 'string' && /^https?:\/\/[^\s]+$/.test(url) && url.length < 2048) shell.openExternal(url); });
 ipcMain.handle('settings:get', () => readSettings());
-ipcMain.handle('settings:set', (e, s) => { const cur = Object.assign(readSettings(), s); writeSettings(cur); return cur; });
+// only known settings, each with its own type, are saved
+const SETTING_TYPES = { username: 'string', mc: 'string', loader: 'string', loaderVersion: 'string', pack: 'string', playAs: 'string', playAsChosen: 'boolean',
+  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object' };
+ipcMain.handle('settings:set', (e, s) => {
+  const cur = readSettings();
+  for (const [k, v] of Object.entries(s && typeof s === 'object' ? s : {})) {
+    if (SETTING_TYPES[k] !== typeof v || v === null) continue;
+    if (typeof v === 'string' && v.length > 120) continue;
+    if (k === 'memory' && !(v >= 512 && v <= 65536)) continue;
+    if (k === 'updSnooze') { cur[k] = { ver: String(v.ver || '').slice(0, 20), until: +v.until || 0 }; continue; }
+    cur[k] = v;
+  }
+  writeSettings(cur); return cur;
+});
 ipcMain.handle('folder', (e, which) => { const p = which === 'servers' ? path.join(ROOT, 'servers') : ROOT; fs.mkdirSync(p, { recursive: true }); shell.openPath(p); });
 ipcMain.handle('info', () => ({ version: app.getVersion(), ram: Math.floor(os.totalmem() / 1048576), site: SITE }));
 

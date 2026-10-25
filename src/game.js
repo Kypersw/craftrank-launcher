@@ -37,22 +37,37 @@ async function getJson(url) {
   return r.json();
 }
 
-async function download(url, file, onPct) {
+/**
+ * Downloads a file. With expect = { sha1 | sha256 | sha512: hex } the file is checked before it is kept:
+ * a file that does not match is thrown away, so a changed or broken download never runs.
+ */
+async function download(url, file, onPct, expect) {
+  if (!/^https:\/\//.test(url)) throw new Error('Download failed (not a secure link)');
   const r = await net.fetch(url, { headers: UA });
   if (!r.ok) throw new Error('Download failed (' + r.status + ')');
   const total = +r.headers.get('content-length') || 0;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.part';
   const out = fs.createWriteStream(tmp);
+  const algo = expect && ['sha512', 'sha256', 'sha1'].find((a) => typeof expect[a] === 'string' && /^[a-f0-9]{40,128}$/i.test(expect[a]));
+  const hash = algo ? crypto.createHash(algo) : null;
   let got = 0;
   for await (const chunk of r.body) {
     out.write(chunk); got += chunk.length;
+    if (hash) hash.update(chunk);
     if (onPct && total) onPct(Math.round(got / total * 100));
   }
   await new Promise((ok, no) => { out.end(); out.on('finish', ok); out.on('error', no); });
+  if (hash && hash.digest('hex') !== expect[algo].toLowerCase()) {
+    try { fs.unlinkSync(tmp); } catch (e) {}
+    throw new Error('Download failed (the file did not match its checksum). Try again.');
+  }
   fs.renameSync(tmp, file);
   return file;
 }
+/** A file name from a download list, safe to use inside one folder (no folders, no odd characters). */
+const safeName = (n) => path.basename(String(n || '')).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/^\.+/, '_') || 'file';
+const OPTIFINE_FILE = /^(preview_)?OptiFine_[0-9.]+_[A-Za-z0-9_.-]+\.jar$/;
 
 /**
  * Assets, fetched before the installer runs: thousands of small files over a fixed set of kept-alive
@@ -148,6 +163,7 @@ async function optifineList() {
   return map;
 }
 async function downloadOptifine(root, file, progress) {
+  if (!OPTIFINE_FILE.test(String(file)) || /\.\./.test(file)) throw new Error('Pick an OptiFine version from the list.');
   const dest = path.join(root, 'optifine', file);
   if (fs.existsSync(dest) && fs.statSync(dest).size > 100000) return dest;
   progress('Downloading OptiFine', 0);
@@ -274,7 +290,7 @@ async function syncPack(instDir, mc, loader, pack, progress) {
   const statePath = path.join(instDir, 'craftrank-pack.json');
   let state = {};
   try { state = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch (e) {}
-  const remove = () => { (state.files || []).forEach((f) => { try { fs.unlinkSync(path.join(mods, f)); } catch (e) {} }); state = {}; };
+  const remove = () => { (state.files || []).forEach((f) => { try { fs.unlinkSync(path.join(mods, safeName(f))); } catch (e) {} }); state = {}; };
   const def = PACKS[pack];
   if (!def || loader === 'vanilla' || loader === 'forge') {
     remove(); fs.mkdirSync(instDir, { recursive: true }); fs.writeFileSync(statePath, '{}');
@@ -296,14 +312,15 @@ async function syncPack(instDir, mc, loader, pack, progress) {
       continue;
     }
     const file = list[0].files.find((f) => f.primary) || list[0].files[0];
-    await download(file.url, path.join(mods, file.filename));
-    files.push(file.filename);
+    const fname = safeName(file.filename);
+    await download(file.url, path.join(mods, fname), null, file.hashes);
+    files.push(fname);
   }
   // Fabric API, which most of these mods need
   if (loader !== 'neoforge') {
     try {
       const fa = await getJson('https://api.modrinth.com/v2/project/fabric-api/version?loaders=' + encodeURIComponent(JSON.stringify(['fabric'])) + '&game_versions=' + encodeURIComponent(JSON.stringify([mc])));
-      if (fa.length) { const f = fa[0].files.find((x) => x.primary) || fa[0].files[0]; if (!fs.existsSync(path.join(mods, f.filename))) { await download(f.url, path.join(mods, f.filename)); files.push(f.filename); } }
+      if (fa.length) { const f = fa[0].files.find((x) => x.primary) || fa[0].files[0], fname = safeName(f.filename); if (!fs.existsSync(path.join(mods, fname))) { await download(f.url, path.join(mods, fname), null, f.hashes); files.push(fname); } }
     } catch (e) {}
   }
   fs.writeFileSync(statePath, JSON.stringify({ key, files }));
@@ -405,15 +422,15 @@ async function installPack(root, mc, loader, id) {
   if (!list.length) throw new Error('This pack has no files to download.');
   const fl = list[0].files.find((x) => x.primary) || list[0].files[0];
   const { dir, file, st } = packState(root, mc, loader);
-  const name = fl.filename.replace(/[\\/:*?"<>|]/g, '_');
-  await download(fl.url, path.join(dir, name));
+  const name = safeName(fl.filename);
+  await download(fl.url, path.join(dir, name), null, fl.hashes);
   st[id] = name; fs.writeFileSync(file, JSON.stringify(st));
   setPackOn(instanceDir(root, mc, loader), name, true);
   return { file: name, exact };
 }
 function removePack(root, mc, loader, id) {
   const { dir, file, st } = packState(root, mc, loader);
-  if (st[id]) { setPackOn(instanceDir(root, mc, loader), st[id], false); try { fs.unlinkSync(path.join(dir, st[id])); } catch (e) {} delete st[id]; fs.writeFileSync(file, JSON.stringify(st)); }
+  if (st[id]) { setPackOn(instanceDir(root, mc, loader), st[id], false); try { fs.unlinkSync(path.join(dir, safeName(st[id]))); } catch (e) {} delete st[id]; fs.writeFileSync(file, JSON.stringify(st)); }
 }
 /** options.txt keeps the list of switched-on packs: resourcePacks:["vanilla","file/x.zip"] */
 function setPackOn(inst, name, on) {

@@ -25,20 +25,26 @@ async function versionsFor(type) {
   return [];
 }
 
+/** Where the server file comes from, and its checksum when the project publishes one (checked after the download). */
 async function jarUrl(type, version) {
   if (type === 'paper' || type === 'velocity') {
     const b = await getJson('https://fill.papermc.io/v3/projects/' + type + '/versions/' + encodeURIComponent(version) + '/builds/latest');
-    return b.downloads['server:default'].url;
+    const d = b.downloads['server:default'];
+    return { url: d.url, expect: d.checksums || null };
   }
-  if (type === 'purpur') return 'https://api.purpurmc.org/v2/purpur/' + encodeURIComponent(version) + '/latest/download';
-  if (type === 'bungeecord') return 'https://hub.spigotmc.org/jenkins/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar';
+  if (type === 'purpur') return { url: 'https://api.purpurmc.org/v2/purpur/' + encodeURIComponent(version) + '/latest/download', expect: null };
+  if (type === 'bungeecord') return { url: 'https://hub.spigotmc.org/jenkins/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar', expect: null };
   if (type === 'vanilla') {
     const meta = (await versionList()).versions.find((v) => v.id === version);
+    if (!meta) throw new Error('Minecraft ' + version + ' was not found.');
     const full = await getJson(meta.url);
-    return full.downloads.server.url;
+    if (!full.downloads || !full.downloads.server) throw new Error('Mojang has no server file for ' + version + '.');
+    return { url: full.downloads.server.url, expect: { sha1: full.downloads.server.sha1 } };
   }
   throw new Error('Unknown server type');
 }
+const ID = /^[a-z0-9-]{1,80}$/;
+const int = (v, lo, hi, d) => { const n = Math.round(+v); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
 
 /** Java the server needs: proxies and new versions run on 21, old versions on 8 or 17. */
 function javaFor(type, version) {
@@ -65,22 +71,26 @@ function listServers(root) {
 async function createServer(root, opts, progress) {
   if (!TYPES[opts.type]) throw new Error('Pick a server type.');
   if (!opts.eula) throw new Error("Accept Mojang's EULA to create a server.");
-  const name = String(opts.name || '').trim().slice(0, 40) || TYPES[opts.type].name + ' server';
+  // one line only: a line break in the name would add settings to server.properties
+  const name = String(opts.name || '').replace(/[\r\n\u0000-\u001f\u2028\u2029]+/g, ' ').trim().slice(0, 40) || TYPES[opts.type].name + ' server';
   const id = (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'server') + '-' + Date.now().toString(36);
   const dir = path.join(root, 'servers', id);
   fs.mkdirSync(dir, { recursive: true });
-  const version = opts.version || (await versionsFor(opts.type))[0];
+  const version = String(opts.version || (await versionsFor(opts.type))[0] || '');
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(version)) throw new Error('Pick a version from the list.');
+  const port = int(opts.port, 1024, 65535, TYPES[opts.type].proxy ? 25577 : 25565), memory = int(opts.memory, 512, 65536, 2048);
   progress('Downloading ' + TYPES[opts.type].name + ' ' + version, 0);
-  await download(await jarUrl(opts.type, version), path.join(dir, 'server.jar'), (p) => progress('Downloading ' + TYPES[opts.type].name, p));
+  const jar = await jarUrl(opts.type, version);
+  try { await download(jar.url, path.join(dir, 'server.jar'), (p) => progress('Downloading ' + TYPES[opts.type].name, p), jar.expect); }
+  catch (e) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e2) {} throw e; }
   if (!TYPES[opts.type].proxy) {
     fs.writeFileSync(path.join(dir, 'eula.txt'), '# Accepted in CraftRank Launcher (https://aka.ms/MinecraftEULA)\neula=true\n');
-    const port = +opts.port || 25565;
     fs.writeFileSync(path.join(dir, 'server.properties'), [
       'server-port=' + port, 'motd=' + name.replace(/\n/g, ' '), 'online-mode=' + (opts.online ? 'true' : 'false'),
-      'max-players=' + (+opts.maxPlayers || 20), 'view-distance=10', 'enable-command-block=false',
+      'max-players=' + int(opts.maxPlayers, 1, 1000, 20), 'view-distance=10', 'enable-command-block=false',
     ].join('\n') + '\n');
   }
-  const meta = { name, type: opts.type, version, memory: +opts.memory || 2048, port: +opts.port || (TYPES[opts.type].proxy ? 25577 : 25565), created: Date.now() };
+  const meta = { name, type: opts.type, version, memory, port, created: Date.now() };
   fs.writeFileSync(path.join(dir, 'craftrank-server.json'), JSON.stringify(meta, null, 2));
   return Object.assign(meta, { id, dir });
 }
@@ -88,9 +98,10 @@ async function createServer(root, opts, progress) {
 async function startServer(root, id, onLine, progress) {
   if (procs.has(id)) throw new Error('This server is already running.');
   const s = listServers(root).find((x) => x.id === id);
-  if (!s) throw new Error('Server not found.');
+  if (!s || !TYPES[s.type]) throw new Error('Server not found.');
+  const mem = int(s.memory, 512, 65536, 2048);
   const java = consoleJava(await ensureJava(root, javaFor(s.type, s.version), progress));
-  const args = ['-Xms' + Math.min(1024, s.memory) + 'M', '-Xmx' + s.memory + 'M', '-jar', 'server.jar'];
+  const args = ['-Xms' + Math.min(1024, mem) + 'M', '-Xmx' + mem + 'M', '-jar', 'server.jar'];
   if (!TYPES[s.type].proxy) args.push('--nogui');
   const child = spawn(java, args, { cwd: s.dir, windowsHide: true });
   const entry = { child, log: [] };
@@ -101,7 +112,7 @@ async function startServer(root, id, onLine, progress) {
   return true;
 }
 
-function command(id, cmd) { const p = procs.get(id); if (p && cmd) p.child.stdin.write(String(cmd).slice(0, 500) + '\n'); }
+function command(id, cmd) { const p = procs.get(id); if (p && cmd) p.child.stdin.write(String(cmd).replace(/[\r\n]+/g, ' ').slice(0, 500) + '\n'); }
 function stopServer(root, id) {
   const p = procs.get(id); if (!p) return;
   const s = listServers(root).find((x) => x.id === id);
@@ -111,6 +122,7 @@ function stopServer(root, id) {
 function logOf(id) { const p = procs.get(id); return p ? p.log.slice() : []; }
 function stopAll() { for (const [, p] of procs) try { p.child.kill(); } catch (e) {} }
 function removeServer(root, id) {
+  if (!ID.test(String(id))) throw new Error('Server not found.');
   if (procs.has(id)) throw new Error('Stop the server first.');
   const dir = path.join(root, 'servers', id);
   if (!fs.existsSync(path.join(dir, 'craftrank-server.json'))) throw new Error('Server not found.');
