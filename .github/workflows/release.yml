@@ -48,6 +48,19 @@ jobs:
             echo "build=yes" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Update release notes
+        # release-notes.md is the newest version's notes; notes/v<version>.md fixes the notes of older releases
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail="Download CraftRank-Launcher.exe (no install needed) or CraftRank-Launcher-Setup.exe (installer). More on https://craftrank.org/launcher"
+          upd() { gh release view "$1" >/dev/null 2>&1 || return 0; body="$(cat "$2")"$'\n\n'"$tail"; [ "$(gh release view "$1" --json body -q .body)" == "$body" ] || gh release edit "$1" --notes "$body"; }
+          [ -s release-notes.md ] && upd "${{ steps.ver.outputs.tag }}" release-notes.md
+          for f in notes/v*.md; do [ -s "$f" ] && upd "$(basename "$f" .md)" "$f"; done
+          true
+
       - uses: actions/setup-node@v4
         if: steps.ver.outputs.build == 'yes'
         with:
