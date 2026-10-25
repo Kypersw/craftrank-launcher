@@ -6,6 +6,31 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const os = require('os');
+const { pathToFileURL } = require('url');
+
+/* Only the launcher's own pages may call the main process. */
+const UI_URL = pathToFileURL(path.join(__dirname, 'ui')).href + '/';
+const fromUs = (e) => { const u = e && e.senderFrame && e.senderFrame.url; return typeof u === 'string' && u.startsWith(UI_URL); };
+const _handle = ipcMain.handle.bind(ipcMain), _on = ipcMain.on.bind(ipcMain);
+ipcMain.handle = (ch, fn) => _handle(ch, (e, ...a) => { if (!fromUs(e)) throw new Error('Blocked: not from the launcher window.'); return fn(e, ...a); });
+ipcMain.on = (ch, fn) => _on(ch, (e, ...a) => { if (fromUs(e)) fn(e, ...a); });
+
+/**
+ * Links that open in the browser: HTTPS only, to CraftRank and the few sites the launcher links to,
+ * or an ad link that came with the CraftRank feed (set by the site's admin).
+ */
+const LINK_HOSTS = ['craftrank.org', 'github.com', 'modrinth.com', 'aka.ms', 'minecraft.net'];
+let feedLinks = new Set();
+function safeOpen(url) {
+  let u; try { u = new URL(String(url)); } catch (e) { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password || String(url).length > 2048) return false;
+  const h = u.hostname.toLowerCase();
+  const site = (() => { try { return new URL(SITE).hostname.toLowerCase(); } catch (e) { return ''; } })();
+  const okHost = LINK_HOSTS.concat(site ? [site] : []).some((d) => h === d || h.endsWith('.' + d));
+  if (!okHost && !feedLinks.has(u.href)) return false;
+  shell.openExternal(u.href);
+  return true;
+}
 
 // follow a system HTTPS proxy when one is set, so downloads work on proxied networks too
 try {
@@ -92,8 +117,10 @@ function createWindow() {
   // shown when the page says it is ready (or after 20 s, whatever happens)
   const fallback = setTimeout(showMain, 20000);
   win.once('show', () => clearTimeout(fallback));
-  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file://')) { e.preventDefault(); if (/^https?:\/\//.test(url)) shell.openExternal(url); } });
+  win.webContents.setWindowOpenHandler(({ url }) => { safeOpen(url); return { action: 'deny' }; });
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(UI_URL)) { e.preventDefault(); safeOpen(url); } });
+  splash.webContents.on('will-navigate', (e) => e.preventDefault());
+  splash.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 function showMain() {
   if (!win || win.isDestroyed() || win.isVisible()) return;
@@ -139,7 +166,7 @@ app.on('browser-window-created', (e, w) => w.on('closed', () => { if (w === spla
 
 /* window and settings */
 ipcMain.handle('win', (e, a) => { const w = BrowserWindow.fromWebContents(e.sender) || win; if (a === 'min') w.minimize(); else if (a === 'close') w.close(); });
-ipcMain.handle('open', (e, url) => { if (typeof url === 'string' && /^https?:\/\/[^\s]+$/.test(url) && url.length < 2048) shell.openExternal(url); });
+ipcMain.handle('open', (e, url) => { safeOpen(url); });
 ipcMain.handle('settings:get', () => readSettings());
 // only known settings, each with its own type, are saved
 const SETTING_TYPES = { username: 'string', mc: 'string', loader: 'string', loaderVersion: 'string', pack: 'string', playAs: 'string', playAsChosen: 'boolean',
@@ -164,8 +191,9 @@ ipcMain.handle('info', () => ({ version: app.getVersion(), ram: Math.floor(os.to
 ipcMain.handle('feed', async () => {
   const cache = path.join(app.getPath('userData'), 'feed.json');
   const r = await account.feed();
-  if (r.ok) { try { fs.writeFileSync(cache, JSON.stringify(r)); } catch (e) {} return r; }
-  try { return Object.assign(JSON.parse(fs.readFileSync(cache, 'utf8')), { offline: true, why: r.error }); } catch (e) { return { servers: [], resources: [], offline: true, why: r.error }; }
+  const keep = (f) => { feedLinks = new Set((f.ads || []).map((x) => { try { return new URL(x.url).href; } catch (e) { return ''; } }).filter(Boolean)); return f; };
+  if (r.ok) { try { fs.writeFileSync(cache, JSON.stringify(r)); } catch (e) {} return keep(r); }
+  try { return keep(Object.assign(JSON.parse(fs.readFileSync(cache, 'utf8')), { offline: true, why: r.error })); } catch (e) { return { servers: [], resources: [], offline: true, why: r.error }; }
 });
 ipcMain.handle('config', () => account.config());
 

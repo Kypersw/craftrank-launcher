@@ -49,7 +49,9 @@ async function download(url, file, onPct, expect) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.part';
   const out = fs.createWriteStream(tmp);
-  const algo = expect && ['sha512', 'sha256', 'sha1'].find((a) => typeof expect[a] === 'string' && /^[a-f0-9]{40,128}$/i.test(expect[a]));
+  const algo = expect && ['sha512', 'sha256', 'sha1', 'md5'].find((a) => typeof expect[a] === 'string' && /^[a-f0-9]{32,128}$/i.test(expect[a]));
+  // a .jar is run by Java: it is only kept when it matches a published checksum (OptiFine, which publishes none, is checked in downloadOptifine)
+  if (/\.jar$/i.test(file) && !algo && !(expect && expect.optifine)) throw new Error('Download failed (no checksum to check the file against).');
   const hash = algo ? crypto.createHash(algo) : null;
   let got = 0;
   for await (const chunk of r.body) {
@@ -165,7 +167,7 @@ async function optifineList() {
 async function downloadOptifine(root, file, progress) {
   if (!OPTIFINE_FILE.test(String(file)) || /\.\./.test(file)) throw new Error('Pick an OptiFine version from the list.');
   const dest = path.join(root, 'optifine', file);
-  if (fs.existsSync(dest) && fs.statSync(dest).size > 100000) return dest;
+  if (fs.existsSync(dest) && fs.statSync(dest).size > 100000) { checkOptifine(root, file, dest); return dest; }
   progress('Downloading OptiFine', 0);
   let url = null;
   try {
@@ -173,16 +175,27 @@ async function downloadOptifine(root, file, progress) {
     const m = /href=['"](downloadx\?f=[^'"]+)['"]/.exec(page);
     if (m) url = 'https://optifine.net/' + m[1].replace(/&amp;/g, '&');
   } catch (e) {}
-  // BMCLAPI names a build by Minecraft version, type and patch: OptiFine_1.21.1_HD_U_J1 → HD_U / J1,
-  // preview_OptiFine_1.21.1_HD_U_J1_pre10 → HD_U_J1 / pre10
-  const mirror = () => {
-    const m = /^(preview_)?OptiFine_([0-9.]+)_(.+)\.jar$/.exec(file); if (!m) return null;
-    const parts = m[3].split('_'), patch = m[1] ? parts.pop() : parts.slice(2).join('_'), type = m[1] ? parts.join('_') : parts.slice(0, 2).join('_');
-    return 'https://bmclapi2.bangbang93.com/optifine/' + m[2] + '/' + type + '/' + patch;
-  };
-  try { if (!url) throw new Error('no link'); await download(url, dest, (p) => progress('Downloading OptiFine', p)); }
-  catch (e) { const u = mirror(); if (!u) throw new Error('Could not download OptiFine. Try again in a minute.'); await download(u, dest, (p) => progress('Downloading OptiFine', p)); }
+  // only from optifine.net itself (OptiFine publishes no checksums, so no third-party mirrors)
+  if (!url || !/^https:\/\/optifine\.net\/downloadx\?f=[^\s]+$/.test(url)) throw new Error('Could not download OptiFine from optifine.net. Try again in a minute.');
+  await download(url, dest, (p) => progress('Downloading OptiFine', p), { optifine: true });
+  checkOptifine(root, file, dest);
   return dest;
+}
+
+/**
+ * OptiFine publishes no checksums. A downloaded jar must be a real OptiFine jar (a zip with OptiFine's
+ * classes), and the first good copy of each build is remembered by SHA-256: a later download of the same
+ * build that differs is refused.
+ */
+function checkOptifine(root, file, dest) {
+  const buf = fs.readFileSync(dest);
+  const bad = () => { try { fs.unlinkSync(dest); } catch (e) {} throw new Error('The OptiFine download was not a valid OptiFine file. Try again.'); };
+  if (buf.length < 100000 || buf.readUInt32LE(0) !== 0x04034b50 || !buf.includes('net/optifine/')) bad();
+  const known = path.join(root, 'optifine-hashes.json');
+  let k = {}; try { k = JSON.parse(fs.readFileSync(known, 'utf8')); } catch (e) {}
+  const h = crypto.createHash('sha256').update(buf).digest('hex');
+  if (k[file] && k[file] !== h) bad();
+  if (!k[file]) { k[file] = h; fs.writeFileSync(known, JSON.stringify(k, null, 1)); }
 }
 
 /** The Forge build OptiFine was made for ("Forge 52.0.16" or "Forge #2847"), else Forge's own pick. */
@@ -268,8 +281,7 @@ async function ensureAgent(root) {
   try {
     const meta = await getJson('https://authlib-injector.yushi.moe/artifact/latest.json');
     if (fs.existsSync(file) && sha256(file) === meta.checksums.sha256) return file;
-    await download(meta.download_url, file);
-    if (sha256(file) !== meta.checksums.sha256) { fs.unlinkSync(file); return null; }
+    await download(meta.download_url, file, null, { sha256: meta.checksums.sha256 });
     return file;
   } catch (e) { return fs.existsSync(file) ? file : null; }
 }

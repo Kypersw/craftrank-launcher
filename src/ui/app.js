@@ -249,7 +249,7 @@ $('#prLogout').addEventListener('click', async () => { await cr.logout(); state.
 async function loadServers() {
   state.ms.list = await cr.srv.list();
   const types = await cr.srv.types();
-  $('#msTypes').innerHTML = Object.entries(types).map(([k, t]) => `<button type="button" class="type${k === state.ms.type ? ' on' : ''}" data-type="${k}"><b>${esc(t.name)}</b><small>${esc(t.about)}</small></button>`).join('');
+  $('#msTypes').innerHTML = Object.entries(types).filter(([, t]) => !t.legacy).map(([k, t]) => `<button type="button" class="type${k === state.ms.type ? ' on' : ''}" data-type="${k}"><b>${esc(t.name)}</b><small>${esc(t.about)}</small></button>`).join('');
   $('#msList').innerHTML = state.ms.list.map((s) => `<button class="ms-item${s.id === state.ms.sel ? ' on' : ''}" data-ms="${esc(s.id)}"><b><i class="dot${s.running ? ' on' : ''}"></i>${esc(s.name)}</b><small>${esc(types[s.type] ? types[s.type].name : s.type)} ${esc(s.version)} · port ${s.port}</small></button>`).join('');
   $('#msEmpty').hidden = !!(state.ms.list.length || !$('#msNew').hidden);
   if (state.ms.sel) showServer(state.ms.sel);

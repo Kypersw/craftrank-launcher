@@ -10,26 +10,31 @@ module.exports = function makeAccount(base, file, version) {
   // cannot decrypt, and the encrypted bytes read as text are junk that breaks every request.
   let token = null;
   const ok = (t) => /^[\x21-\x7e]{10,200}$/.test(t || '');
+  const canEncrypt = () => { try { return safeStorage.isEncryptionAvailable(); } catch (e) { return false; } };
   function tok() {
     if (token !== null) return token;
     token = '';
     try {
       const raw = fs.readFileSync(file);
       let t = '';
-      try { if (safeStorage.isEncryptionAvailable()) t = safeStorage.decryptString(raw); } catch (e) {}
-      if (!ok(t)) t = raw.toString();
-      if (ok(t)) token = t; else fs.unlinkSync(file);
+      try { if (canEncrypt()) t = safeStorage.decryptString(raw); } catch (e) {}
+      if (ok(t)) { token = t; return token; }
+      // a sign-in saved as plain text by an older version: use it once, then store it encrypted or not at all
+      const plain = raw.toString();
+      fs.unlinkSync(file);
+      if (ok(plain)) save(plain);
     } catch (e) {}
     return token;
   }
-  const save = (t) => {
+  /** The sign-in is only kept on disk encrypted (Windows: DPAPI). Without encryption it lasts until the launcher closes. */
+  function save(t) {
     token = ok(t) ? t : '';
     try {
-      if (!token) { fs.unlinkSync(file); return; }
+      if (!token || !canEncrypt()) { try { fs.unlinkSync(file); } catch (e) {} return; }
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(token) : token);
+      fs.writeFileSync(file, safeStorage.encryptString(token), { mode: 0o600 });
     } catch (e) {}
-  };
+  }
 
   async function call(route, opts = {}) {
     const headers = { 'User-Agent': 'CraftRankLauncher/' + version, Accept: 'application/json' };

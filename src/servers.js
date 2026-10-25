@@ -9,7 +9,8 @@ const TYPES = {
   purpur: { name: 'Purpur', proxy: false, about: 'Paper with many extra settings.' },
   vanilla: { name: 'Vanilla', proxy: false, about: "Mojang's own server, no plugins." },
   velocity: { name: 'Velocity', proxy: true, about: 'Modern proxy that links several servers into one network.' },
-  bungeecord: { name: 'BungeeCord', proxy: true, about: 'The classic proxy for server networks.' },
+  // BungeeCord publishes no checksum for its download, so new BungeeCord servers are not offered (old ones still start)
+  bungeecord: { name: 'BungeeCord', proxy: true, about: 'The classic proxy for server networks.', legacy: true },
 };
 
 const procs = new Map();   // id -> { child, log }
@@ -21,7 +22,6 @@ async function versionsFor(type) {
   }
   if (type === 'purpur') return (await getJson('https://api.purpurmc.org/v2/purpur')).versions.slice().reverse();
   if (type === 'vanilla') return (await versionList()).versions.filter((v) => v.type === 'release').map((v) => v.id);
-  if (type === 'bungeecord') return ['latest'];
   return [];
 }
 
@@ -32,8 +32,11 @@ async function jarUrl(type, version) {
     const d = b.downloads['server:default'];
     return { url: d.url, expect: d.checksums || null };
   }
-  if (type === 'purpur') return { url: 'https://api.purpurmc.org/v2/purpur/' + encodeURIComponent(version) + '/latest/download', expect: null };
-  if (type === 'bungeecord') return { url: 'https://hub.spigotmc.org/jenkins/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar', expect: null };
+  if (type === 'purpur') {   // the newest build, by number, with its MD5 from Purpur's API
+    const b = await getJson('https://api.purpurmc.org/v2/purpur/' + encodeURIComponent(version) + '/latest');
+    if (!/^\d+$/.test(String(b.build)) || !/^[a-f0-9]{32}$/.test(String(b.md5))) throw new Error('Purpur did not give a checksum for this build.');
+    return { url: 'https://api.purpurmc.org/v2/purpur/' + encodeURIComponent(version) + '/' + b.build + '/download', expect: { md5: b.md5 } };
+  }
   if (type === 'vanilla') {
     const meta = (await versionList()).versions.find((v) => v.id === version);
     if (!meta) throw new Error('Minecraft ' + version + ' was not found.');
@@ -69,7 +72,7 @@ function listServers(root) {
 }
 
 async function createServer(root, opts, progress) {
-  if (!TYPES[opts.type]) throw new Error('Pick a server type.');
+  if (!TYPES[opts.type] || TYPES[opts.type].legacy) throw new Error('Pick a server type.');
   if (!opts.eula) throw new Error("Accept Mojang's EULA to create a server.");
   // one line only: a line break in the name would add settings to server.properties
   const name = String(opts.name || '').replace(/[\r\n\u0000-\u001f\u2028\u2029]+/g, ' ').trim().slice(0, 40) || TYPES[opts.type].name + ' server';
@@ -129,4 +132,5 @@ function removeServer(root, id) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-module.exports = { TYPES, versionsFor, listServers, createServer, startServer, stopServer, command, logOf, stopAll, removeServer };
+const offered = () => Object.fromEntries(Object.entries(TYPES).filter(([, t]) => !t.legacy));
+module.exports = { TYPES, offered, versionsFor, listServers, createServer, startServer, stopServer, command, logOf, stopAll, removeServer };
