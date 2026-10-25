@@ -1,1 +1,1 @@
-CraftRank skins on servers: on Fabric, Quilt, Forge and NeoForge versions the launcher adds the CustomSkinLoader mod, so you and other CraftRank players see your skins on servers too, not only in singleplayer. You can turn it off in Settings.
+Skins on servers show up right away: the skin mod now asks only CraftRank and Mojang, and uses the first one that has the player, instead of waiting for several slow skin sites.

@@ -430,10 +430,21 @@ async function syncSkinMod(instDir, mc, loader, root, progress) {
     try { await download(f.url, path.join(mods, name), null, f.hashes); } catch (e) { return { on: false, reason: 'download' }; }
     st = { key, file: name }; fs.writeFileSync(statePath, JSON.stringify(st));
   }
-  // put CraftRank first in its list of skin sources (it keeps Mojang and the others after it)
-  const extra = path.join(instDir, 'CustomSkinLoader', 'ExtraList');
-  fs.mkdirSync(extra, { recursive: true });
-  fs.writeFileSync(path.join(extra, 'CraftRank.json'), JSON.stringify({ name: 'CraftRank', type: 'MojangAPI', apiRoot: root + 'api/', sessionRoot: root + 'sessionserver/' }, null, 2));
+  // CustomSkinLoader asks every source in its list at once and, by default, waits for all of them to
+  // answer (some are slow, far-away skin sites), so a skin showed late. Only CraftRank and Mojang are
+  // asked, and the first one that has the player wins.
+  const dir = path.join(instDir, 'CustomSkinLoader');
+  fs.mkdirSync(dir, { recursive: true });
+  try { fs.unlinkSync(path.join(dir, 'ExtraList', 'CraftRank.json')); } catch (e) {}
+  const cfg = {
+    version: '15.1', buildNumber: 0,
+    loadlist: [{ name: 'CraftRank', type: 'MojangAPI', apiRoot: root + 'api/', sessionRoot: root + 'sessionserver/' }, { name: 'Mojang', type: 'MojangAPI' }],
+    enableDynamicSkull: true, enableTransparentSkin: true, forceLoadAllTextures: false, enableCape: true, threadPoolSize: 8, cacheExpiry: 30,
+  };
+  const cf = path.join(dir, 'CustomSkinLoader.json');
+  let cur = {}; try { cur = JSON.parse(fs.readFileSync(cf, 'utf8')); } catch (e) {}
+  const same = cur.forceLoadAllTextures === false && JSON.stringify((cur.loadlist || []).map((x) => [x.name, x.apiRoot || '', x.sessionRoot || ''])) === JSON.stringify([['CraftRank', root + 'api/', root + 'sessionserver/'], ['Mojang', cur.loadlist && cur.loadlist[1] && cur.loadlist[1].apiRoot || '', cur.loadlist && cur.loadlist[1] && cur.loadlist[1].sessionRoot || '']]);
+  if (!same) fs.writeFileSync(cf, JSON.stringify(cfg, null, 2));
   return { on: true };
 }
 
