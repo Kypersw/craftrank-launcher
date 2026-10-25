@@ -59,7 +59,7 @@ let busy = false;
 function readSettings() {
   const ram = Math.floor(os.totalmem() / 1048576);
   const def = { username: '', mc: '', loader: 'vanilla', loaderVersion: '', pack: 'none', playAs: 'offline', performance: false, showSnapshots: false, showOld: false,
-    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false, discord: true };
+    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false, discord: true, skinsOnServers: true };
   try { return Object.assign(def, JSON.parse(fs.readFileSync(SETTINGS, 'utf8'))); } catch (e) { return def; }
 }
 function writeSettings(s) { fs.mkdirSync(path.dirname(SETTINGS), { recursive: true }); fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2)); }
@@ -170,7 +170,7 @@ ipcMain.handle('open', (e, url) => { safeOpen(url); });
 ipcMain.handle('settings:get', () => readSettings());
 // only known settings, each with its own type, are saved
 const SETTING_TYPES = { username: 'string', mc: 'string', loader: 'string', loaderVersion: 'string', pack: 'string', playAs: 'string', playAsChosen: 'boolean',
-  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean' };
+  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean', skinsOnServers: 'boolean' };
 ipcMain.handle('settings:set', (e, s) => {
   const cur = readSettings();
   for (const [k, v] of Object.entries(s && typeof s === 'object' ? s : {})) {
@@ -219,6 +219,13 @@ ipcMain.handle('versions', safe(async () => {
 ipcMain.handle('catalog', safe(async () => ({ ok: true, data: await game.catalog() })));
 ipcMain.handle('loaderVersions', safe(async (e, loader, mc) => ({ ok: true, versions: await game.loaderVersions(loader, mc) })));
 
+function skinNote(k) {
+  if (!k || k.on) return '';
+  if (k.reason === 'loader') return 'CraftRank skins show on servers with Fabric, Quilt, Forge or NeoForge versions. With Vanilla or OptiFine you see them only in singleplayer.';
+  if (k.reason === 'version') return 'CraftRank skins on servers are not out for this Minecraft version yet.';
+  if (k.reason === 'download') return 'CraftRank skins on servers are off this time: the skin mod could not be downloaded.';
+  return '';
+}
 /* play */
 ipcMain.handle('play', async (e, opts) => {
   if (busy) return { ok: false, error: 'Already starting the game.' };
@@ -240,7 +247,10 @@ ipcMain.handle('play', async (e, opts) => {
     }
     const pack = opts.pack !== undefined ? opts.pack : s.pack;
     const mc = opts.mc || s.mc || (await game.versionList()).latest.release;
-    const prep = await game.prepare(ROOT, { mc, loader: opts.loader || s.loader, loaderVersion: opts.loaderVersion || s.loaderVersion || '', pack, force: !!opts.force }, progress);
+    // CraftRank skins on servers (see game.syncSkinMod): the skin server from the site, also when playing offline
+    let skinRoot = '';
+    if (s.skinsOnServers !== false) { const cfg = await account.config(); skinRoot = cfg.ok && cfg.skin_server ? cfg.skin_server : SITE.replace(/\/+$/, '') + '/api/ygg/'; }
+    const prep = await game.prepare(ROOT, { mc, loader: opts.loader || s.loader, loaderVersion: opts.loaderVersion || s.loaderVersion || '', pack, force: !!opts.force, skinRoot }, progress);
     progress('Starting Minecraft', 100);
     // Modded versions (OptiFine, Forge, Fabric…) run out of memory below 2 GB: the game freezes
     // when it reloads resources (for example after leaving the video settings) and ends with code 1.
@@ -252,7 +262,7 @@ ipcMain.handle('play', async (e, opts) => {
       since: Date.now(), version: 'Minecraft ' + mc + (loader !== 'vanilla' ? ' · ' + loader[0].toUpperCase() + loader.slice(1) : ''),
       server: srv ? { name: String(srv.name || srv.host).slice(0, 60), address: srv.host + (+srv.port && +srv.port !== 25565 ? ':' + +srv.port : ''), icon: srv.icon, url: srv.url } : null,
     });
-    send('game', { running: true, note: running.skinsOff ? 'Skins are off this time: the skin helper could not be downloaded. Check your connection and start again.' : (prep.pack && prep.pack.reason ? prep.pack.reason : '') });
+    send('game', { running: true, note: running.skinsOff ? 'Skins are off this time: the skin helper could not be downloaded. Check your connection and start again.' : (prep.pack && prep.pack.reason ? prep.pack.reason : (opts.server ? skinNote(prep.skins) : '')) });
     let log = '';
     // Read everything the game prints. If one of its output pipes is never read, it fills up
     // (64 KB on Windows) and the game freezes the next time it writes a log line.

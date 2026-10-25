@@ -304,6 +304,7 @@ function bindSettings(info) {
   const showMem = () => { $('#memVal').textContent = (mem.value / 1024).toFixed(1) + ' GB of ' + (info.ram / 1024).toFixed(0) + ' GB'; };
   showMem(); mem.addEventListener('input', showMem); mem.addEventListener('change', async () => { state.settings = await cr.save({ memory: +mem.value }); });
   $('#msMem').max = Math.max(2048, Math.floor(info.ram * 0.75 / 512) * 512);
+  $('#setSkins').checked = s.skinsOnServers !== false; $('#setSkins').addEventListener('change', async (e) => { state.settings = await cr.save({ skinsOnServers: e.target.checked }); });
   $('#setDiscord').checked = s.discord !== false; $('#setDiscord').addEventListener('change', async (e) => { state.settings = await cr.save({ discord: e.target.checked }); });
   $('#setClose').checked = !!s.closeOnPlay; $('#setClose').addEventListener('change', async (e) => { state.settings = await cr.save({ closeOnPlay: e.target.checked }); });
   $('#setSnap').checked = !!s.showSnapshots; $('#setOld').checked = !!s.showOld; $('#setPerf').checked = s.pack === 'perf';

@@ -1,1 +1,1 @@
-Security update: every downloaded .jar must match a published checksum, OptiFine comes only from optifine.net, your sign-in is stored only encrypted, and links open only over HTTPS to CraftRank and known sites. New BungeeCord servers are no longer offered because BungeeCord publishes no checksum; use Velocity instead.
+CraftRank skins on servers: on Fabric, Quilt, Forge and NeoForge versions the launcher adds the CustomSkinLoader mod, so you and other CraftRank players see your skins on servers too, not only in singleplayer. You can turn it off in Settings.

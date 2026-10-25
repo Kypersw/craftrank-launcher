@@ -403,7 +403,38 @@ async function prepare(root, opts, progress) {
     if (!fs.existsSync(to)) fs.copyFileSync(ofJar, to);
   }
   const pack = await syncPack(instDir, opts.mc, loader, opts.pack || 'none', progress);
-  return { id, java, instDir, pack };
+  const skins = await syncSkinMod(instDir, opts.mc, loader, opts.skinRoot || '', progress);
+  return { id, java, instDir, pack, skins };
+}
+
+/**
+ * CraftRank skins on servers. Offline-mode servers send no skin with a player, so the game only shows
+ * skins it gets from the server itself. CustomSkinLoader (from Modrinth, checked by SHA-512) asks the
+ * CraftRank skin server for every player by name instead. It needs a mod loader: Fabric, Quilt, Forge
+ * (also with OptiFine) or NeoForge. root = CraftRank's skin server, '' = off.
+ */
+async function syncSkinMod(instDir, mc, loader, root, progress) {
+  const mods = path.join(instDir, 'mods'), statePath = path.join(instDir, 'craftrank-skins.json');
+  let st = {}; try { st = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch (e) {}
+  const ml = { fabric: 'fabric', quilt: 'quilt', forge: 'forge', 'forge-optifine': 'forge', neoforge: 'neoforge' }[loader];
+  const drop = () => { if (st.file) try { fs.unlinkSync(path.join(mods, safeName(st.file))); } catch (e) {} st = {}; try { fs.writeFileSync(statePath, '{}'); } catch (e) {} };
+  if (!root || !/^https:\/\/\S+\/$/.test(root) || !ml) { drop(); return { on: false, reason: root && !ml ? 'loader' : '' }; }
+  const key = mc + '|' + ml;
+  if (!(st.key === key && st.file && fs.existsSync(path.join(mods, safeName(st.file))))) {
+    drop();
+    let list = [];
+    try { list = await getJson('https://api.modrinth.com/v2/project/customskinloader/version?loaders=' + encodeURIComponent(JSON.stringify([ml])) + '&game_versions=' + encodeURIComponent(JSON.stringify([mc]))); } catch (e) {}
+    if (!list.length) return { on: false, reason: 'version' };
+    progress('Mod pack: CraftRank skins', 0);
+    const f = list[0].files.find((x) => x.primary) || list[0].files[0], name = safeName(f.filename);
+    try { await download(f.url, path.join(mods, name), null, f.hashes); } catch (e) { return { on: false, reason: 'download' }; }
+    st = { key, file: name }; fs.writeFileSync(statePath, JSON.stringify(st));
+  }
+  // put CraftRank first in its list of skin sources (it keeps Mojang and the others after it)
+  const extra = path.join(instDir, 'CustomSkinLoader', 'ExtraList');
+  fs.mkdirSync(extra, { recursive: true });
+  fs.writeFileSync(path.join(extra, 'CraftRank.json'), JSON.stringify({ name: 'CraftRank', type: 'MojangAPI', apiRoot: root + 'api/', sessionRoot: root + 'sessionserver/' }, null, 2));
+  return { on: true };
 }
 
 /** The folder for one Minecraft version + loader: mods, worlds, settings and resource packs. */
