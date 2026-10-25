@@ -168,7 +168,7 @@ async function play(server) {
   if (!asCr && !/^[A-Za-z0-9_]{3,16}$/.test(username)) { showMsg('Type a username first: 3 to 16 letters, numbers or _.'); $('#barName').focus(); return; }
   showMsg(''); $('#play').disabled = true; $('#verPop').hidden = true;
   const force = $('#force').checked;
-  const r = await cr.play({ playAs: asCr ? 'craftrank' : 'offline', username, force, server: server ? { host: server.host, port: server.port } : null });
+  const r = await cr.play({ playAs: asCr ? 'craftrank' : 'offline', username, force, server: server ? { host: server.host, port: server.port, name: server.name, url: server.url, icon: server.icon } : null });
   if (!r.ok) { $('#play').disabled = false; showMsg(r.error); }
   else { $('#force').checked = false; showMsg(server ? 'Joining ' + server.name + '…' : 'Starting Minecraft…', true); }
 }
@@ -304,6 +304,7 @@ function bindSettings(info) {
   const showMem = () => { $('#memVal').textContent = (mem.value / 1024).toFixed(1) + ' GB of ' + (info.ram / 1024).toFixed(0) + ' GB'; };
   showMem(); mem.addEventListener('input', showMem); mem.addEventListener('change', async () => { state.settings = await cr.save({ memory: +mem.value }); });
   $('#msMem').max = Math.max(2048, Math.floor(info.ram * 0.75 / 512) * 512);
+  $('#setDiscord').checked = s.discord !== false; $('#setDiscord').addEventListener('change', async (e) => { state.settings = await cr.save({ discord: e.target.checked }); });
   $('#setClose').checked = !!s.closeOnPlay; $('#setClose').addEventListener('change', async (e) => { state.settings = await cr.save({ closeOnPlay: e.target.checked }); });
   $('#setSnap').checked = !!s.showSnapshots; $('#setOld').checked = !!s.showOld; $('#setPerf').checked = s.pack === 'perf';
   $('#setSnap').addEventListener('change', async (e) => { state.settings = await cr.save({ showSnapshots: e.target.checked }); });

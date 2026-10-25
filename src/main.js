@@ -21,6 +21,7 @@ try {
 
 const game = require('./game');
 const servers = require('./servers');
+const discord = require('./discord')();
 const SITE = process.env.CRAFTRANK_SITE || 'https://craftrank.org';
 const ROOT = path.join(app.getPath('appData'), '.craftrank');           // game files live here, apart from .minecraft
 const SETTINGS = path.join(app.getPath('userData'), 'settings.json');
@@ -33,7 +34,7 @@ let busy = false;
 function readSettings() {
   const ram = Math.floor(os.totalmem() / 1048576);
   const def = { username: '', mc: '', loader: 'vanilla', loaderVersion: '', pack: 'none', playAs: 'offline', performance: false, showSnapshots: false, showOld: false,
-    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false };
+    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false, discord: true };
   try { return Object.assign(def, JSON.parse(fs.readFileSync(SETTINGS, 'utf8'))); } catch (e) { return def; }
 }
 function writeSettings(s) { fs.mkdirSync(path.dirname(SETTINGS), { recursive: true }); fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2)); }
@@ -115,8 +116,24 @@ ipcMain.handle('news', async () => {
 });
 app.setName('CraftRank Launcher');
 if (process.platform === 'win32') app.setAppUserModelId('org.craftrank.launcher');   // taskbar groups it as CraftRank, with its icon
-app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { servers.stopAll(); app.quit(); });
+app.whenReady().then(() => { createWindow(); startPresence(); });
+app.on('window-all-closed', () => { servers.stopAll(); discord.stop(); app.quit(); });
+
+/* Discord status: "In the launcher" or "Playing on <server>", with buttons to the server page and the launcher */
+let site = { logo: '', page: '' };
+function presence(kind, extra) {
+  if (!readSettings().discord) return;
+  discord.show(Object.assign({ kind, logo: site.logo, launcherUrl: site.page }, extra || {}));
+}
+async function startPresence() {
+  const s = readSettings();
+  discord.setEnabled(s.discord !== false);
+  const cfg = await account.config();
+  if (!cfg.ok) { setTimeout(startPresence, 60000); return; }   // offline: try again in a minute
+  site = { logo: cfg.logo || '', page: cfg.launcher_page || '' };
+  discord.setApp(cfg.discord_app || '');
+  presence('menu');
+}
 // closing the loading window before the launcher opens quits too
 app.on('browser-window-created', (e, w) => w.on('closed', () => { if (w === splash && win && !win.isDestroyed() && !win.isVisible()) app.quit(); }));
 
@@ -126,7 +143,7 @@ ipcMain.handle('open', (e, url) => { if (typeof url === 'string' && /^https?:\/\
 ipcMain.handle('settings:get', () => readSettings());
 // only known settings, each with its own type, are saved
 const SETTING_TYPES = { username: 'string', mc: 'string', loader: 'string', loaderVersion: 'string', pack: 'string', playAs: 'string', playAsChosen: 'boolean',
-  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object' };
+  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean' };
 ipcMain.handle('settings:set', (e, s) => {
   const cur = readSettings();
   for (const [k, v] of Object.entries(s && typeof s === 'object' ? s : {})) {
@@ -136,7 +153,9 @@ ipcMain.handle('settings:set', (e, s) => {
     if (k === 'updSnooze') { cur[k] = { ver: String(v.ver || '').slice(0, 20), until: +v.until || 0 }; continue; }
     cur[k] = v;
   }
-  writeSettings(cur); return cur;
+  writeSettings(cur);
+  if (s && typeof s.discord === 'boolean') { discord.setEnabled(cur.discord); if (cur.discord) presence('menu'); }
+  return cur;
 });
 ipcMain.handle('folder', (e, which) => { const p = which === 'servers' ? path.join(ROOT, 'servers') : ROOT; fs.mkdirSync(p, { recursive: true }); shell.openPath(p); });
 ipcMain.handle('info', () => ({ version: app.getVersion(), ram: Math.floor(os.totalmem() / 1048576), site: SITE }));
@@ -199,7 +218,12 @@ ipcMain.handle('play', async (e, opts) => {
     // when it reloads resources (for example after leaving the video settings) and ends with code 1.
     const ram = Math.floor(os.totalmem() / 1048576), loader = opts.loader || s.loader || 'vanilla';
     const memory = Math.min(Math.max(s.memory, loader === 'vanilla' ? 1024 : 2048), Math.max(1024, Math.floor(ram * 0.6 / 512) * 512));
-    running = await game.start(ROOT, prep, acct, { memory, server: opts.server, skinServer });
+    const srv = opts.server && typeof opts.server.host === 'string' ? opts.server : null;
+    running = await game.start(ROOT, prep, acct, { memory, server: srv ? { host: srv.host, port: +srv.port || 25565 } : null, skinServer });
+    presence('play', {
+      since: Date.now(), version: 'Minecraft ' + mc + (loader !== 'vanilla' ? ' · ' + loader[0].toUpperCase() + loader.slice(1) : ''),
+      server: srv ? { name: String(srv.name || srv.host).slice(0, 60), address: srv.host + (+srv.port && +srv.port !== 25565 ? ':' + +srv.port : ''), icon: srv.icon, url: srv.url } : null,
+    });
     send('game', { running: true, note: running.skinsOff ? 'Skins are off this time: the skin helper could not be downloaded. Check your connection and start again.' : (prep.pack && prep.pack.reason ? prep.pack.reason : '') });
     let log = '';
     // Read everything the game prints. If one of its output pipes is never read, it fills up
@@ -211,7 +235,7 @@ ipcMain.handle('play', async (e, opts) => {
     if (running.stdout) running.stdout.on('data', take);
     if (running.stderr) running.stderr.on('data', take);
     running.on('close', () => { if (out) out.end(); });
-    running.on('exit', (code) => { running = null; send('game', { running: false, code, log: code ? log : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
+    running.on('exit', (code) => { running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
     if (s.closeOnPlay) win.hide();
     return { ok: true };
   } catch (err) {
