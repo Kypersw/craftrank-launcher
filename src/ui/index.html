@@ -28,6 +28,7 @@
   <nav class="nav">
     <a href="#" data-page="home">Play</a>
     <a href="#" data-page="servers">Servers</a>
+    <a href="#" data-page="mods">Mods</a>
     <a href="#" data-page="packs">Texture packs</a>
     <a href="#" data-page="resources">Resources</a>
     <a href="#" data-page="myservers">My servers</a>
@@ -56,6 +57,15 @@
       <div class="page-h"><h1>Servers</h1><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="srvQ" placeholder="Search servers or game modes" spellcheck="false"></label></div>
       <a class="ad ad-wide" data-slot="0" hidden></a>
       <div class="rows" id="allServers"></div>
+    </section>
+
+    <!-- MODS -->
+    <section class="page" id="p-mods">
+      <div class="page-h"><h1>Mods</h1><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="mdQ" placeholder="Search mods" spellcheck="false"></label></div>
+      <div class="md-bar"><p class="news-sub" id="mdNote">Mods from the CraftRank site, for the version you play.</p><div class="md-show"><button class="btn plain on" data-mdshow="all">All mods</button><button class="btn plain" data-mdshow="mine">Installed <span id="mdCount"></span></button></div></div>
+      <p class="note md-warn" id="mdWarn" hidden></p>
+      <div class="grid packs" id="mdList"></div>
+      <div class="pk-more"><button class="btn plain" id="mdMore" hidden>Show more</button><button class="btn plain" id="mdFolder">Open the mods folder</button></div>
     </section>
 
     <!-- TEXTURE PACKS -->

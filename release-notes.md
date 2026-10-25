@@ -1,1 +1,1 @@
-Quieter updates: no console windows flash while the launcher updates itself; it just closes and opens again on the new version.
+New Mods page: pick from the mods listed on CraftRank (Sodium, Iris, minimaps, zoom, JEI and many more) and install them in one click. The mods each one needs come along by themselves, every file is checked against Modrinth before it is kept, and mods go only into the version you picked (Fabric, Quilt, Forge or NeoForge).

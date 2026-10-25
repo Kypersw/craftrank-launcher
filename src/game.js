@@ -417,6 +417,7 @@ async function prepare(root, opts, progress) {
     if (!fs.existsSync(to)) fs.copyFileSync(ofJar, to);
   }
   const pack = await syncPack(instDir, opts.mc, loader, opts.pack || 'none', progress);
+  await syncMods(root, opts.mc, loader, progress);
   const skins = await syncSkinMod(instDir, opts.mc, loader, opts.skinRoot || '', progress);
   return { id, java, instDir, pack, skins };
 }
@@ -516,6 +517,106 @@ function setPackOn(inst, name, on) {
   fs.writeFileSync(opt, lines.filter((l, k) => l !== '' || k < lines.length - 1).join('\n') + '\n');
 }
 
+/* ---------- mods (the list comes from the CraftRank site, the files from Modrinth) ---------- */
+/** Modrinth loader names a mod may have to run on our loader; null = this version can't run mods. */
+function modLoaders(loader) {
+  return { fabric: ['fabric'], quilt: ['quilt', 'fabric'], forge: ['forge'], 'forge-optifine': ['forge'], neoforge: ['neoforge'] }[loader] || null;
+}
+function modsDir(root, mc, loader) { return path.join(instanceDir(root, mc, loader), 'mods'); }
+/**
+ * What the player installed here: { projectId: { file, title, dep: bool, by: [projectIds] } }.
+ * dep = it came along because another mod needs it; by = the mods that need it.
+ */
+function modState(root, mc, loader) {
+  const dir = modsDir(root, mc, loader), f = path.join(dir, '.craftrank-mods.json');
+  let st = {}; try { st = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) {}
+  if (!st || typeof st !== 'object' || Array.isArray(st)) st = {};
+  for (const id of Object.keys(st)) if (!/^[A-Za-z0-9]{6,12}$/.test(id) || !st[id] || typeof st[id].file !== 'string') delete st[id];
+  return { dir, file: f, st };
+}
+const MOD_ID = /^[A-Za-z0-9]{6,12}$/;
+async function modVersion(id, mc, loaders) {
+  const list = await getJson('https://api.modrinth.com/v2/project/' + encodeURIComponent(id) + '/version?loaders=' + encodeURIComponent(JSON.stringify(loaders)) + '&game_versions=' + encodeURIComponent(JSON.stringify([mc])));
+  // a release if there is one, else the newest beta
+  return list.find((v) => v.version_type === 'release') || list[0] || null;
+}
+/**
+ * Installs a mod and the mods it needs into this version's mods folder. Every file is checked
+ * against Modrinth's SHA-512 before it is kept.
+ */
+async function installMod(root, mc, loader, id, progress) {
+  const loaders = modLoaders(loader);
+  if (!loaders) throw new Error('Mods run on Fabric, Quilt, Forge or NeoForge. Pick one of those in the version menu first.');
+  if (!MOD_ID.test(id)) throw new Error('Unknown mod.');
+  const { dir, file, st } = modState(root, mc, loader);
+  fs.mkdirSync(dir, { recursive: true });
+  const seen = new Set(), added = [], addedIds = [];
+  const step = async (pid, by, depth) => {
+    if (seen.has(pid) || depth > 4) return;
+    seen.add(pid);
+    const have = st[pid];
+    if (have && fs.existsSync(path.join(dir, safeName(have.file)))) {
+      if (by) { have.by = [...new Set((have.by || []).concat(by))]; } else have.dep = false;
+      return;
+    }
+    const v = await modVersion(pid, mc, loaders);
+    if (!v) {
+      if (!by) throw new Error('This mod is not out for Minecraft ' + mc + ' with ' + loaderName(loader) + ' yet.');
+      throw new Error('A mod it needs is not out for Minecraft ' + mc + ' with ' + loaderName(loader) + ' yet.');
+    }
+    const fl = (v.files || []).find((x) => x.primary) || (v.files || [])[0];
+    if (!fl || !/\.jar$/i.test(fl.filename || '')) throw new Error('This mod has no file to download.');
+    const name = safeName(fl.filename);
+    if (progress) progress(name);
+    if (!fs.existsSync(path.join(dir, name))) await download(fl.url, path.join(dir, name), null, fl.hashes);
+    let title = pid; try { title = (await getJson('https://api.modrinth.com/v2/project/' + encodeURIComponent(pid))).title || pid; } catch (e) {}
+    st[pid] = { file: name, title: String(title).slice(0, 80), dep: !!by, by: by ? [by] : [] };
+    added.push(name); addedIds.push(pid);
+    for (const d of v.dependencies || []) {
+      if (d.dependency_type !== 'required') continue;
+      let dp = d.project_id;
+      if (!dp && d.version_id) { try { dp = (await getJson('https://api.modrinth.com/v2/version/' + encodeURIComponent(d.version_id))).project_id; } catch (e) {} }
+      if (dp && MOD_ID.test(dp)) await step(dp, pid, depth + 1);
+    }
+  };
+  try { await step(id, null, 0); }
+  catch (e) { // leave the folder as it was
+    for (const n of added) { try { fs.unlinkSync(path.join(dir, n)); } catch (x) {} }
+    throw e;
+  }
+  fs.writeFileSync(file, JSON.stringify(st));
+  const deps = addedIds.filter((k) => k !== id).map((k) => st[k].title);
+  return { file: st[id].file, deps };
+}
+function loaderName(l) { return { fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', 'forge-optifine': 'Forge', neoforge: 'NeoForge' }[l] || l; }
+/** Removes a mod, and the mods that only came along for it. */
+function removeMod(root, mc, loader, id) {
+  const { dir, file, st } = modState(root, mc, loader);
+  if (!st[id]) return;
+  const drop = (pid) => {
+    const m = st[pid]; if (!m) return;
+    try { fs.unlinkSync(path.join(dir, safeName(m.file))); } catch (e) {}
+    delete st[pid];
+    for (const k of Object.keys(st)) {
+      if (!st[k] || !st[k].by || !st[k].by.includes(pid)) continue;
+      st[k].by = st[k].by.filter((x) => x !== pid);
+      if (st[k].dep && !st[k].by.length) drop(k);
+    }
+  };
+  const need = Object.keys(st).filter((k) => (st[id].by || []).includes(k));
+  if (need.length) throw new Error(need.map((k) => st[k].title).join(', ') + ' needs this mod. Remove ' + (need.length > 1 ? 'those' : 'that') + ' first.');
+  drop(id);
+  fs.writeFileSync(file, JSON.stringify(st));
+}
+/** Before the game starts: puts back mods whose file went missing (removed by hand, or by a mod pack). */
+async function syncMods(root, mc, loader, progress) {
+  if (!modLoaders(loader)) return;
+  const { dir, st } = modState(root, mc, loader);
+  const top = Object.keys(st).filter((k) => !st[k].dep);
+  if (Object.keys(st).every((k) => fs.existsSync(path.join(dir, safeName(st[k].file))))) return;
+  for (const id of top) { try { await installMod(root, mc, loader, id, (n) => progress('Mods: ' + n, 0)); } catch (e) {} }
+}
+
 /** Starts the game. account: {name, uuid, token, type}: 'msa' = Microsoft, 'mojang' = CraftRank profile (skin agent). */
 async function start(root, prep, account, opts) {
   const agent = opts.skinServer ? await ensureAgent(root) : null;
@@ -533,4 +634,4 @@ async function start(root, prep, account, opts) {
   return proc;
 }
 
-module.exports = { instanceDir, searchPacks, packState, installPack, removePack, PACKS, versionList, loaderVersions, catalog, optifineList, prepare, start, ensureJava, consoleJava, download, getJson, LOADERS };
+module.exports = { instanceDir, modLoaders, modState, installMod, removeMod, searchPacks, packState, installPack, removePack, PACKS, versionList, loaderVersions, catalog, optifineList, prepare, start, ensureJava, consoleJava, download, getJson, LOADERS };

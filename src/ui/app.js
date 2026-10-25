@@ -22,6 +22,7 @@ function go(page) {
   $$('.paper').forEach((p) => { p.scrollTop = 0; });
   if (page === 'myservers') loadServers();
   if (page === 'packs') loadPacks(false);
+  if (page === 'mods') loadMods(false);
   if (page === 'account') renderAccount();
 }
 let toastT;
@@ -145,6 +146,9 @@ $('#verList').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-v]'); if (!b) return;
   state.settings = await cr.save({ mc: b.dataset.v, loader: b.dataset.l, loaderVersion: '' });
   $('#verPop').hidden = true; verLabel();
+  // the mods and texture pack lists belong to a version: show the new version's
+  const pg = document.body.dataset.page;
+  if (pg === 'mods') loadMods(false); else if (pg === 'packs') loadPacks(false);
 });
 $('#verFil').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (!b) return; verFilter = b.dataset.f; $$('#verFil button').forEach((x) => x.classList.toggle('on', x === b)); renderVerList(); });
 $('#verQ').addEventListener('input', renderVerList);
@@ -362,6 +366,56 @@ $('#pkList').addEventListener('click', async (e) => {
     pk.installed[id] = r.file; renderPacks();
     toast(r.exact ? 'Installed and switched on. Start the game to see it.' : 'Installed. This pack was made for another version, it may look a little different.');
   }
+});
+
+/* ---------- mods (from the CraftRank site) ---------- */
+const md = { items: [], off: 0, total: 0, key: '', busy: false, installed: {}, can: true, show: 'all', working: {} };
+let mdT;
+$('#mdQ').addEventListener('input', () => { clearTimeout(mdT); mdT = setTimeout(() => loadMods(true), 350); });
+$('#mdMore').addEventListener('click', () => loadMods(false, true));
+$('#mdFolder').addEventListener('click', () => cr.mods.folder());
+$$('[data-mdshow]').forEach((b) => b.addEventListener('click', () => { md.show = b.dataset.mdshow; $$('[data-mdshow]').forEach((x) => x.classList.toggle('on', x === b)); renderMods(); }));
+cr.on('mods:step', (d) => { const b = $(`[data-md="${CSS.escape(d.id)}"]`); if (b && d.file) b.textContent = 'Installing ' + (d.file.length > 22 ? d.file.slice(0, 20) + '…' : d.file); });
+async function loadMods(reset, more) {
+  const q = $('#mdQ').value.trim(), key = q + '|' + (state.settings.mc || '') + '|' + (state.settings.loader || '');
+  if (!reset && !more && md.key === key && md.items.length) return renderMods();
+  if (md.busy) return; md.busy = true;
+  if (!more) { md.items = []; md.off = 0; $('#mdList').innerHTML = '<div class="empty" style="grid-column:1/-1">Loading mods…</div>'; }
+  const r = await cr.mods.list(q, md.off);
+  md.busy = false;
+  if (!r.ok) { $('#mdList').innerHTML = `<div class="empty" style="grid-column:1/-1">${esc(r.error || 'Could not load mods.')}</div>`; return; }
+  md.key = key; md.total = r.total; md.installed = r.installed || {}; md.can = r.canMod; md.items = md.items.concat(r.items); md.off = md.items.length;
+  $('#mdNote').textContent = 'For ' + $('#verLabel').textContent + '. Mods go into this version only, with the mods they need.';
+  const w = $('#mdWarn');
+  w.hidden = md.can;
+  w.textContent = md.can ? '' : 'Mods need a mod loader. Pick a Fabric, Forge or NeoForge version in the version menu (Fabric has the most mods), then install them here.';
+  renderMods();
+}
+function renderMods() {
+  const mine = Object.keys(md.installed).filter((id) => !md.installed[id].dep);
+  $('#mdCount').textContent = mine.length ? '(' + mine.length + ')' : '';
+  const list = md.show === 'mine'
+    ? mine.map((id) => md.items.find((m) => m.id === id) || { id, title: md.installed[id].title || id, about: md.installed[id].file, author: '', downloads: 0, icon: '', url: '' })
+    : md.items;
+  $('#mdList').innerHTML = list.map((m) => {
+    const has = !!(md.installed[m.id] && !md.installed[m.id].dep), work = md.working[m.id];
+    const meta = [m.author ? esc(m.author) : '', m.downloads ? `<span>${short(m.downloads)} downloads</span>` : '', m.env === 'both' ? '<span class="md-tag" title="Only works on servers that have this mod too, and in single player">Server needs it too</span>' : ''].filter(Boolean).join('');
+    return `<div class="res"><span class="res-ic">${m.icon ? `<img src="${esc(m.icon)}" alt="">` : esc(m.title.slice(0, 2).toUpperCase())}</span>
+      <div><b>${esc(m.title)}</b><p>${esc(m.about)}</p><small class="res-meta">${meta}</small>
+      <div class="pk-act">${m.url ? `<a href="#" class="more" data-open="${esc(m.url)}">Details</a>` : '<span></span>'}<button class="btn plain${has ? ' on' : ''}" data-md="${esc(m.id)}"${work || (!md.can && !has) ? ' disabled' : ''}>${work || (has ? 'Installed' : 'Install')}</button></div></div></div>`;
+  }).join('') || `<div class="empty" style="grid-column:1/-1">${md.show === 'mine' ? 'No mods installed in this version yet.' : 'No mods found for this version.'}</div>`;
+  $('#mdMore').hidden = md.show === 'mine' || md.items.length >= md.total;
+}
+$('#mdList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-md]'); if (!b || b.disabled) return;
+  const id = b.dataset.md, has = md.installed[id] && !md.installed[id].dep;
+  md.working[id] = has ? 'Removing…' : 'Installing…'; renderMods();
+  const r = has ? await cr.mods.remove(id) : await cr.mods.install(id);
+  delete md.working[id];
+  if (r.ok) md.installed = r.installed || md.installed;
+  renderMods();
+  if (!r.ok) return toast(r.error);
+  toast(has ? 'Mod removed.' : r.deps && r.deps.length ? 'Installed with ' + r.deps.join(', ') + '. Start the game to use it.' : 'Installed. Start the game to use it.');
 });
 
 /* ---------- update reminder ---------- */

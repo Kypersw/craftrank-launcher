@@ -318,6 +318,27 @@ ipcMain.handle('packs:install', safe(async (e, id) => { const v = await curVer()
 ipcMain.handle('packs:remove', safe(async (e, id) => { const v = await curVer(); game.removePack(ROOT, v.mc, v.loader, String(id)); return { ok: true }; }));
 ipcMain.handle('packs:folder', async () => { const v = await curVer(); const d = game.packState(ROOT, v.mc, v.loader).dir; fs.mkdirSync(d, { recursive: true }); shell.openPath(d); });
 
+/* mods: the list comes from the CraftRank site, the files from Modrinth (checked by SHA-512) */
+ipcMain.handle('mods:list', safe(async (e, q, offset) => {
+  const v = await curVer();
+  const u = SITE.replace(/\/+$/, '') + '/api/launcher.php?r=mods&mc=' + encodeURIComponent(v.mc) + '&loader=' + encodeURIComponent(v.loader)
+    + '&q=' + encodeURIComponent(String(q || '').slice(0, 60)) + '&offset=' + Math.max(0, Math.min(5000, offset | 0));
+  const r = await game.getJson(u);
+  const items = (Array.isArray(r.items) ? r.items : []).slice(0, 30).filter((m) => m && /^[A-Za-z0-9]{6,12}$/.test(m.id)).map((m) => ({
+    id: m.id, title: String(m.title || ''), about: String(m.about || ''), author: String(m.author || ''), downloads: m.downloads | 0,
+    icon: /^https:\/\//.test(m.icon || '') ? m.icon : '', url: /^https:\/\//.test(m.url || '') ? m.url : '', env: String(m.env || ''),
+  }));
+  return { ok: true, mc: v.mc, loader: v.loader, canMod: !!game.modLoaders(v.loader), total: r.total | 0, items, installed: game.modState(ROOT, v.mc, v.loader).st };
+}));
+ipcMain.handle('mods:install', safe(async (e, id) => {
+  if (busy) return { ok: false, error: 'Wait until the game has started, then try again.' };
+  const v = await curVer();
+  const r = await game.installMod(ROOT, v.mc, v.loader, String(id), (n) => send('mods:step', { id: String(id), file: n }));
+  return Object.assign({ ok: true, installed: game.modState(ROOT, v.mc, v.loader).st }, r);
+}));
+ipcMain.handle('mods:remove', safe(async (e, id) => { const v = await curVer(); game.removeMod(ROOT, v.mc, v.loader, String(id)); return { ok: true, installed: game.modState(ROOT, v.mc, v.loader).st }; }));
+ipcMain.handle('mods:folder', async () => { const v = await curVer(); const d = game.modState(ROOT, v.mc, v.loader).dir; fs.mkdirSync(d, { recursive: true }); shell.openPath(d); });
+
 /* my servers */
 const sline = (id, line, stopped) => send('srv:line', { id, line, stopped: !!stopped });
 ipcMain.handle('srv:types', () => servers.TYPES);

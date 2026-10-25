@@ -273,6 +273,12 @@ input[type=range] { accent-color: var(--br); }
 .pk-act { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .pk-act .btn { height: 30px; padding: 0 14px; }
 .pk-act .btn.on { color: var(--br); box-shadow: inset 0 0 0 1px rgba(27,217,106,.5); }
+.md-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.md-show { display: flex; gap: 6px; flex: none; margin-top: -10px; }
+.md-show .btn { height: 30px; padding: 0 12px; }
+.md-show .btn.on { color: var(--hi); box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+.md-warn { margin: 0 0 14px; }
+.md-tag { color: #e0b252; }
 .pk-more { display: flex; justify-content: center; gap: 10px; margin: 18px 0 6px; }
 
 /* update reminder */
