@@ -1,1 +1,1 @@
-The character on the home screen is redrawn: sharper at every screen size, with clean edges and no blurry glow, and it now fits fully inside the window.
+Security update: every downloaded .jar must match a published checksum, OptiFine comes only from optifine.net, your sign-in is stored only encrypted, and links open only over HTTPS to CraftRank and known sites. New BungeeCord servers are no longer offered because BungeeCord publishes no checksum; use Velocity instead.
