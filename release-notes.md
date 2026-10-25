@@ -1,1 +1,1 @@
-Details on a texture pack now opens its page on CraftRank, with screenshots, versions and similar packs, instead of sending you to another site. Download counts on pack cards are shorter and easier to read.
+The character on the home screen is redrawn: sharper at every screen size, with clean edges and no blurry glow, and it now fits fully inside the window.
