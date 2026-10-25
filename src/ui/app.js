@@ -374,6 +374,7 @@ async function checkUpdate(info) {
   const cands = [state.cfg && state.cfg.latest, n && n.ok && n.version].filter((v) => /^\d+\.\d+\.\d+$/.test(v || ''));
   const latest = cands.reduce((a, b) => (!a || newer(b, a) ? b : a), ''), cur = info.version;
   if (!latest || !newer(latest, cur)) return;
+  $('#updBtn').hidden = false; $('#updBtn').onclick = () => { $('#upd').hidden = false; $('#updGo').onclick = () => runUpdate(info, latest); };
   if (!$('.nav a[data-page="home"] .nav-dot')) $('.nav a[data-page="home"]').insertAdjacentHTML('beforeend', '<i class="nav-dot" title="Update available"></i>');
   const snooze = state.settings.updSnooze || {};
   if (snooze.ver === latest && snooze.until > Date.now()) return;
@@ -381,11 +382,22 @@ async function checkUpdate(info) {
   $('#updVer').textContent = latest; $('#updCur').textContent = cur;
   $('#updNotes').textContent = n && n.ok && n.version === latest ? (n.body || '') : '';
   $('#upd').hidden = false;
-  const url = 'https://github.com/Kypersw/craftrank-launcher/releases/latest/download/CraftRank-Launcher.exe';
-  $('#updGo').onclick = () => { cr.open(url); $('#upd').hidden = true; toast('The download opened in your browser. Close the launcher and open the new file.'); };
+  $('#updBtn').hidden = false;
+  $('#updGo').onclick = () => runUpdate(info, latest);
   const later = async () => { $('#upd').hidden = true; state.settings = await cr.save({ updSnooze: { ver: latest, until: Date.now() + 24 * 3600 * 1000 } }); };
   $('#updLater').onclick = later; $('#updX').onclick = later;
 }
+
+/** One press: download, check and install the new version; the launcher closes and opens again. */
+async function runUpdate(info, latest) {
+  if (!info.selfUpdate) { cr.open('https://github.com/Kypersw/craftrank-launcher/releases/latest/download/CraftRank-Launcher.exe'); $('#upd').hidden = true; toast('The download opened in your browser. Close the launcher and open the new file.'); return; }
+  $('#updGo').disabled = true; $('#updLater').disabled = true; $('#updBar').hidden = false; $('#updSt').hidden = false; $('#updSt').textContent = 'Starting…';
+  const r = await cr.update();
+  if (r.ok && r.started) { $('#updSt').textContent = 'Installing ' + latest + '. The launcher opens again in a moment.'; return; }
+  $('#updGo').disabled = false; $('#updLater').disabled = false; $('#updBar').hidden = true;
+  $('#updSt').textContent = r.ok && r.upToDate ? 'You already have the newest version.' : (r.error || 'The update did not work. Try again.');
+}
+cr.on('update', (st) => { if (!st) return; $('#updSt').hidden = false; $('#updSt').textContent = st.text + (st.pct ? ' ' + st.pct + '%' : ''); $('#updBarI').style.width = (st.pct || 0) + '%'; });
 
 async function refreshAll() {
   const f = await cr.feed();

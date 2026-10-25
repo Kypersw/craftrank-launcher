@@ -46,6 +46,7 @@ try {
 
 const game = require('./game');
 const servers = require('./servers');
+const updater = require('./updater');
 const discord = require('./discord')();
 const SITE = process.env.CRAFTRANK_SITE || 'https://craftrank.org';
 const ROOT = path.join(app.getPath('appData'), '.craftrank');           // game files live here, apart from .minecraft
@@ -186,7 +187,17 @@ ipcMain.handle('settings:set', (e, s) => {
   return cur;
 });
 ipcMain.handle('folder', (e, which) => { const p = which === 'servers' ? path.join(ROOT, 'servers') : ROOT; fs.mkdirSync(p, { recursive: true }); shell.openPath(p); });
-ipcMain.handle('info', () => ({ version: app.getVersion(), ram: Math.floor(os.totalmem() / 1048576), site: SITE }));
+ipcMain.handle('info', () => ({ version: app.getVersion(), ram: Math.floor(os.totalmem() / 1048576), site: SITE, selfUpdate: updater.mode() !== 'dev' }));
+/* update the launcher in place (see updater.js) */
+let updating = false;
+ipcMain.handle('update:run', async () => {
+  if (updating) return { ok: false, error: 'Already updating.' };
+  if (running) return { ok: false, error: 'Close Minecraft first, then update.' };
+  updating = true;
+  try { const r = await updater.run((st) => send('update', st)); return Object.assign({ ok: true }, r); }
+  catch (e) { return { ok: false, error: e.message || String(e) }; }
+  finally { updating = false; }
+});
 
 /* site data, cached for when the internet is down */
 ipcMain.handle('feed', async () => {

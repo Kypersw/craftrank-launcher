@@ -1,1 +1,1 @@
-The update reminder now reads the newest version straight from GitHub and checks again every 20 minutes while the launcher is open, so a new version shows up right after its release.
+One-click updates: when a new version is out, press Update in the top bar. The launcher downloads it from GitHub, checks it, installs it over the old one and opens again, for both the installed and the portable launcher.
