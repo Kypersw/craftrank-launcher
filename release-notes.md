@@ -1,1 +1,1 @@
-One-click updates: when a new version is out, press Update in the top bar. The launcher downloads it from GitHub, checks it, installs it over the old one and opens again, for both the installed and the portable launcher.
+Forge installs more reliably: the installer now comes over HTTPS from Forge's own server, and the progress bar shows each step, including the minute or two Forge needs to prepare the game files, so it no longer looks stuck.

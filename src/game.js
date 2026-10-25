@@ -8,7 +8,7 @@ const { net } = require('electron');
 const { launch, Version, MinecraftFolder } = require('@xmcl/core');
 const {
   getVersionList, installTask, installDependenciesTask, installJavaRuntimeTask, fetchJavaRuntimeManifest,
-  getFabricLoaderArtifact, installFabric, installQuiltVersion, installForge, installNeoForged, installOptifine,
+  getFabricLoaderArtifact, installFabric, installQuiltVersion, installForgeTask, installNeoForgedTask, installOptifine,
 } = require('@xmcl/installer');
 
 const UA = { 'User-Agent': 'CraftRankLauncher (craftrank.org)' };
@@ -260,6 +260,20 @@ async function loaderVersions(loader, mc) {
   return [];
 }
 
+/* Forge and NeoForge: the installer is fetched over HTTPS from Forge's own Maven (the default list starts with
+ * an old http:// address that some networks stall on), and each step shows in the progress bar, so a long
+ * step (Forge prepares the game files with Java, which can take a few minutes) does not look stuck. */
+const forgeOpts = (java, neo) => Object.assign({ java: consoleJava(java) }, neo ? {} : { mavenHost: ['https://maven.minecraftforge.net/'] }, DL);
+async function forgeLike(name, task, progress) {
+  const step = (p) => /postProcess/i.test(p) ? 'preparing the game files, this can take a few minutes' : /library|libraries/i.test(p) ? 'downloading libraries' : /installer|download/i.test(p) ? 'downloading the installer' : 'installing';
+  let cur = 'installing';
+  const tell = () => progress('Installing ' + name + ' · ' + cur, task.total > 0 ? Math.min(99, Math.round(task.progress / task.total * 100)) : 0);
+  const tick = setInterval(tell, 1000);   // keeps the line alive while Java works
+  try {
+    return await task.startAndWait({ onStart(t) { cur = step(t.path); tell(); }, onUpdate() { tell(); } });
+  } finally { clearInterval(tick); }
+}
+
 /** Java runtime Mojang uses for this component, installed once. */
 async function ensureJava(root, component, progress) {
   const dir = path.join(root, 'runtime', component);
@@ -384,12 +398,12 @@ async function prepare(root, opts, progress) {
       const fv = await forgeForOptifine(opts.mc, lv);
       if (!fv) throw new Error('Forge is not available for Minecraft ' + opts.mc + '.');
       progress('Installing Forge ' + fv, 0);
-      id = await installForge({ mcversion: opts.mc, version: fv }, root, Object.assign({ java: consoleJava(java) }, DL));
+      id = await forgeLike('Forge', installForgeTask({ mcversion: opts.mc, version: fv }, root, forgeOpts(java)), progress);
     }
     else if (loader === 'fabric') id = await installFabric(await getFabricLoaderArtifact(opts.mc, lv), root, DL);
     else if (loader === 'quilt') id = await installQuiltVersion({ minecraftVersion: opts.mc, version: lv, minecraft: root });
-    else if (loader === 'forge') id = await installForge({ mcversion: opts.mc, version: lv }, root, Object.assign({ java: consoleJava(java) }, DL));
-    else if (loader === 'neoforge') id = await installNeoForged('neoforge', lv, root, Object.assign({ java: consoleJava(java) }, DL));
+    else if (loader === 'forge') id = await forgeLike('Forge', installForgeTask({ mcversion: opts.mc, version: lv }, root, forgeOpts(java)), progress);
+    else if (loader === 'neoforge') id = await forgeLike('NeoForge', installNeoForgedTask('neoforge', lv, root, forgeOpts(java, true)), progress);
     const resolved = await Version.parse(new MinecraftFolder(root), id);
     const d = installDependenciesTask(resolved, DL);
     await d.startAndWait({ onUpdate() { if (d.total) progress('Downloading libraries', Math.round(d.progress / d.total * 100)); } });

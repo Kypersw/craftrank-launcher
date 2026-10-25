@@ -1,7 +1,7 @@
 {
   "name": "craftrank-launcher",
   "productName": "CraftRank Launcher",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "description": "CraftRank Launcher",
   "main": "src/main.js",
   "author": "CraftRank",
