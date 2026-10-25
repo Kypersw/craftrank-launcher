@@ -57,7 +57,7 @@ const UI = require('url').pathToFileURL(path.join(SRC, 'ui')).href + '/index.htm
   for (const n of ['../../x.jar', 'OptiFine_1.2_../../../evil.jar', 'OptiFine_1.20_a/b.jar']) ok('OptiFine name refused: ' + n, !(OF.test(n) && !/\.\./.test(n)));
   ok('real OptiFine name accepted', OF.test('OptiFine_1.21.1_HD_U_J1.jar'));
 
-  fs.rmSync(tmp, { recursive: true, force: true });
+  try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (e) {}   // Windows may still hold a file a moment longer
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
