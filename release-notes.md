@@ -1,1 +1,1 @@
-Forge installs more reliably: the installer now comes over HTTPS from Forge's own server, and the progress bar shows each step, including the minute or two Forge needs to prepare the game files, so it no longer looks stuck.
+Security update: the launcher now runs on Electron 44, which still gets security fixes, and the download library is updated; npm audit reports no known issues. The windows also refuse every browser permission and middle-click links, and each release has to pass the launcher's security tests before it is built.

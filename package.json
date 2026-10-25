@@ -1,22 +1,24 @@
 {
   "name": "craftrank-launcher",
   "productName": "CraftRank Launcher",
-  "version": "1.6.6",
+  "version": "1.6.7",
   "description": "CraftRank Launcher",
   "main": "src/main.js",
   "author": "CraftRank",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --x64"
+    "dist": "electron-builder --win --x64",
+    "test": "node test/security.test.js"
   },
   "dependencies": {
     "@xmcl/core": "2.13.0",
-    "@xmcl/installer": "5.4.0"
+    "@xmcl/installer": "5.4.0",
+    "undici": "^6.29.1"
   },
   "devDependencies": {
-    "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
+    "electron": "44.9.3",
+    "electron-builder": "^26.18.0",
     "pe-library": "^1.0.1",
     "resedit": "^2.0.3"
   },
@@ -68,5 +70,8 @@
       "tr"
     ],
     "compression": "maximum"
+  },
+  "overrides": {
+    "undici": "^6.29.1"
   }
 }

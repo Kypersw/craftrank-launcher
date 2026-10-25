@@ -100,7 +100,8 @@ function createWindow() {
   splash = new BrowserWindow({
     width: 440, height: 620, frame: false, transparent: true, resizable: false, maximizable: false, show: false, center: true, skipTaskbar: false,
     backgroundColor: '#00000000', icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'), title: 'CraftRank Launcher',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    // locked down: no Node.js, isolated and sandboxed; middle-click cannot open links in new windows
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, disableBlinkFeatures: 'Auxclick', spellcheck: false },
   });
   splash.loadFile(path.join(__dirname, 'ui', 'splash.html'));
   splash.once('ready-to-show', () => splash.show());
@@ -112,14 +113,15 @@ function createWindow() {
     backgroundColor: '#00000000', hasShadow: false,
     icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     title: 'CraftRank Launcher',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    // locked down: no Node.js, isolated and sandboxed; middle-click cannot open links in new windows
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, disableBlinkFeatures: 'Auxclick', spellcheck: false },
   });
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
   // shown when the page says it is ready (or after 20 s, whatever happens)
   const fallback = setTimeout(showMain, 20000);
   win.once('show', () => clearTimeout(fallback));
   win.webContents.setWindowOpenHandler(({ url }) => { safeOpen(url); return { action: 'deny' }; });
-  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(UI_URL)) { e.preventDefault(); safeOpen(url); } });
+  win.webContents.on('will-navigate', (e, url) => { url = url || e.url || ''; if (!url.startsWith(UI_URL)) { e.preventDefault(); safeOpen(url); } });
   splash.webContents.on('will-navigate', (e) => e.preventDefault());
   splash.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
@@ -145,7 +147,17 @@ ipcMain.handle('news', async () => {
 });
 app.setName('CraftRank Launcher');
 if (process.platform === 'win32') app.setAppUserModelId('org.craftrank.launcher');   // taskbar groups it as CraftRank, with its icon
-app.whenReady().then(() => { createWindow(); startPresence(); });
+app.whenReady().then(() => {
+  // the launcher needs no browser permissions (camera, microphone, notifications, location…): refuse them all
+  const { session } = require('electron');
+  session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  createWindow(); startPresence();
+});
+// no window may ever be created with other settings (for example by a page asking for a webview)
+app.on('web-contents-created', (e, wc) => {
+  wc.on('will-attach-webview', (ev) => ev.preventDefault());
+});
 app.on('window-all-closed', () => { servers.stopAll(); discord.stop(); app.quit(); });
 
 /* Discord status: "In the launcher" or "Playing on <server>", with buttons to the server page and the launcher */

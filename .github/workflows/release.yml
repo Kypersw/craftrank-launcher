@@ -70,6 +70,14 @@ jobs:
       - if: steps.ver.outputs.build == 'yes'
         run: npm ci
 
+      - name: Security checks
+        # the security tests must pass and no library the launcher ships may have a known high or critical issue
+        if: steps.ver.outputs.build == 'yes'
+        shell: bash
+        run: |
+          npm test
+          npm audit --omit=dev --audit-level=high
+
       - name: Build portable and installer
         if: steps.ver.outputs.build == 'yes'
         run: npx electron-builder --win portable nsis --x64 --publish never
