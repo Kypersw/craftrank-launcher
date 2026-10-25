@@ -1,1 +1,1 @@
-Security update: the launcher now runs on Electron 44, which still gets security fixes, and the download library is updated; npm audit reports no known issues. The windows also refuse every browser permission and middle-click links, and each release has to pass the launcher's security tests before it is built.
+Quieter updates: no console windows flash while the launcher updates itself; it just closes and opens again on the new version.

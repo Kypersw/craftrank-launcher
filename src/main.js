@@ -47,6 +47,7 @@ try {
 const game = require('./game');
 const servers = require('./servers');
 const updater = require('./updater');
+const swapping = updater.swapPortable();   // a new portable .exe putting itself in place of the old one
 const discord = require('./discord')();
 const SITE = process.env.CRAFTRANK_SITE || 'https://craftrank.org';
 const ROOT = path.join(app.getPath('appData'), '.craftrank');           // game files live here, apart from .minecraft
@@ -148,6 +149,7 @@ ipcMain.handle('news', async () => {
 app.setName('CraftRank Launcher');
 if (process.platform === 'win32') app.setAppUserModelId('org.craftrank.launcher');   // taskbar groups it as CraftRank, with its icon
 app.whenReady().then(() => {
+  if (swapping) return;
   // the launcher needs no browser permissions (camera, microphone, notifications, location…): refuse them all
   const { session } = require('electron');
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(false));

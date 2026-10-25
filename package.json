@@ -1,7 +1,7 @@
 {
   "name": "craftrank-launcher",
   "productName": "CraftRank Launcher",
-  "version": "1.6.7",
+  "version": "1.6.8",
   "description": "CraftRank Launcher",
   "main": "src/main.js",
   "author": "CraftRank",
@@ -58,7 +58,8 @@
       "shortcutName": "CraftRank Launcher",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "CraftRank-Launcher-${version}.exe"

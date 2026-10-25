@@ -65,14 +65,30 @@ async function run(onStep) {
     // electron-builder's installer: /S silent, into the same folder; --force-run starts the launcher afterwards
     spawn(file, ['--updated', '/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   } else {
-    // the running portable .exe is locked: a small script swaps it once this launcher has closed
-    const target = process.env.PORTABLE_EXECUTABLE_FILE;
-    const cmd = path.join(dir, 'swap.cmd');
-    fs.writeFileSync(cmd, ['@echo off', 'set n=0', ':w', 'set /a n+=1', `move /y "${file}" "${target}" >nul 2>&1 && goto ok`, 'if %n% geq 90 goto end', 'ping -n 2 127.0.0.1 >nul', 'goto w', ':ok', `start "" "${target}"`, ':end', '(goto) 2>nul & del "%~f0"', ''].join('\r\n'));
-    spawn('cmd.exe', ['/c', cmd], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    // the running portable .exe is locked: the new .exe copies itself over it once this launcher has
+    // closed, then starts it (see swapPortable; no console windows)
+    spawn(file, ['--craftrank-swap=' + process.env.PORTABLE_EXECUTABLE_FILE], { detached: true, stdio: 'ignore' }).unref();
   }
   setTimeout(() => app.quit(), 600);
   return { started: true, version: rel.version };
 }
 
-module.exports = { run, mode, newer };
+/**
+ * Called first thing at start. When this copy was started by run() with --craftrank-swap=<old .exe>, it
+ * waits until the old launcher has closed, copies itself over it, starts it and quits. Returns true then.
+ */
+function swapPortable() {
+  const arg = process.argv.find((a) => a.startsWith('--craftrank-swap='));
+  if (!arg) return false;
+  const target = arg.slice('--craftrank-swap='.length), self = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (!self || !/\.exe$/i.test(target) || !path.isAbsolute(target)) { app.exit(0); return true; }
+  let tries = 0;
+  const step = () => {
+    try { fs.copyFileSync(self, target); spawn(target, [], { detached: true, stdio: 'ignore' }).unref(); app.exit(0); }
+    catch (e) { if (++tries > 120) app.exit(1); else setTimeout(step, 500); }
+  };
+  step();
+  return true;
+}
+
+module.exports = { run, mode, newer, swapPortable };
