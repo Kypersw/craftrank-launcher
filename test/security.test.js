@@ -22,7 +22,7 @@ const game = require(path.join(SRC, 'game.js')), servers = require(path.join(SRC
 let pass = 0, fail = 0;
 const ok = (name, cond) => { if (cond) pass++; else fail++; console.log((cond ? 'PASS ' : 'FAIL ') + name); };
 const rejects = async (fn) => { try { await fn(); return false; } catch (e) { return true; } };
-const UI = 'file://' + path.join(SRC, 'ui') + '/index.html', ev = (url) => ({ senderFrame: { url } });
+const UI = require('url').pathToFileURL(path.join(SRC, 'ui')).href + '/index.html', ev = (url) => ({ senderFrame: { url } });
 
 (async () => {
   // 1. links open only over HTTPS, to CraftRank and known sites
