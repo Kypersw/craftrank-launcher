@@ -138,7 +138,8 @@ ipcMain.handle('news', async () => {
     if (!r.ok) return { ok: false };
     const j = await r.json();
     const body = String(j.body || '').split(/\r?\n\s*\r?\n/)[0].replace(/\*\*|__|`|#+ |\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
-    return { ok: true, title: j.name || j.tag_name || 'CraftRank Launcher', date: j.published_at || '', body, url: j.html_url };
+    const version = String(j.tag_name || '').replace(/^v/i, '');
+    return { ok: true, title: j.name || j.tag_name || 'CraftRank Launcher', date: j.published_at || '', body, url: j.html_url, version: /^\d+\.\d+\.\d+$/.test(version) ? version : '' };
   } catch (e) { return { ok: false }; }
 });
 app.setName('CraftRank Launcher');

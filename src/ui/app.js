@@ -366,17 +366,22 @@ $('#pkList').addEventListener('click', async (e) => {
 
 /* ---------- update reminder ---------- */
 const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+// The newest version is read from GitHub directly (the site caches it for a while) and from the site,
+// at start and again every 20 minutes while the launcher is open.
 async function checkUpdate(info) {
-  const latest = state.cfg && state.cfg.latest, cur = info.version;
+  const [cfg, n] = await Promise.all([cr.config(), cr.news()]);
+  if (cfg && cfg.ok) state.cfg = cfg;
+  const cands = [state.cfg && state.cfg.latest, n && n.ok && n.version].filter((v) => /^\d+\.\d+\.\d+$/.test(v || ''));
+  const latest = cands.reduce((a, b) => (!a || newer(b, a) ? b : a), ''), cur = info.version;
   if (!latest || !newer(latest, cur)) return;
+  if (!$('.nav a[data-page="home"] .nav-dot')) $('.nav a[data-page="home"]').insertAdjacentHTML('beforeend', '<i class="nav-dot" title="Update available"></i>');
   const snooze = state.settings.updSnooze || {};
-  $('.nav a[data-page="home"]').insertAdjacentHTML('beforeend', '<i class="nav-dot" title="Update available"></i>');
   if (snooze.ver === latest && snooze.until > Date.now()) return;
+  if (!$('#upd').hidden && $('#updVer').textContent === latest) return;
   $('#updVer').textContent = latest; $('#updCur').textContent = cur;
-  const n = await cr.news();
-  if (n && n.ok && n.title && n.title.includes(latest)) $('#updNotes').textContent = n.body || '';
+  $('#updNotes').textContent = n && n.ok && n.version === latest ? (n.body || '') : '';
   $('#upd').hidden = false;
-  const url = state.cfg.download || 'https://craftrank.org/launcher';
+  const url = 'https://github.com/Kypersw/craftrank-launcher/releases/latest/download/CraftRank-Launcher.exe';
   $('#updGo').onclick = () => { cr.open(url); $('#upd').hidden = true; toast('The download opened in your browser. Close the launcher and open the new file.'); };
   const later = async () => { $('#upd').hidden = true; state.settings = await cr.save({ updSnooze: { ver: latest, until: Date.now() + 24 * 3600 * 1000 } }); };
   $('#updLater').onclick = later; $('#updX').onclick = later;
@@ -410,5 +415,6 @@ async function refreshAll() {
   idleStatus();
   boot(100, 'Ready');
   setTimeout(() => checkUpdate(info), 1500);
+  setInterval(() => checkUpdate(info), 20 * 60 * 1000);
   setInterval(async () => { const f = await cr.feed(); if (!f.offline) { state.feed = f; renderServers(); renderResources(); renderAds(); } }, 5 * 60 * 1000);
 })();

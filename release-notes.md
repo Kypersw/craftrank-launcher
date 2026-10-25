@@ -1,1 +1,1 @@
-Skins on servers show up right away: the skin mod now asks only CraftRank and Mojang, and uses the first one that has the player, instead of waiting for several slow skin sites.
+The update reminder now reads the newest version straight from GitHub and checks again every 20 minutes while the launcher is open, so a new version shows up right after its release.
