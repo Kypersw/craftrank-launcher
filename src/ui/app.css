@@ -309,3 +309,17 @@ input[type=range] { accent-color: var(--br); }
 .upd-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; margin: 6px 0 8px; }
 .upd-bar i { display: block; height: 100%; width: 0; background: #22c55e; transition: width .2s; }
 .upd-st { margin: 0 0 12px; font-size: 13px; color: var(--tx2); }
+
+/* capes on the account page */
+.pr-capes { grid-column: 1 / -1; display: grid; gap: 14px; }
+.pc-h h3 { margin: 0; color: var(--hi); font: 600 18px Cond, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.pc-h .hint { margin: 4px 0 0; }
+.capes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.cape { display: grid; justify-items: center; gap: 8px; padding: 16px 12px; border-radius: 3px; background: rgba(255,255,255,.03); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
+.cape.on { box-shadow: inset 0 0 0 2px var(--br); }
+.cape canvas { width: 60px; height: 96px; image-rendering: pixelated; filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
+.cape b { color: var(--hi); font-size: 14px; }
+.cape small { color: var(--tx2); font-size: 12px; line-height: 1.4; }
+.cape .btn { width: 100%; }
+.cape.none { align-content: center; }
+.cape.none span { color: var(--tx2); font-size: 13px; }

@@ -234,7 +234,40 @@ async function renderAccount() {
   const skinItem = null;
   $('#skinSlim').checked = !!(pr && pr.slim);
   await drawSkin($('#skinCanvas'), skinItem ? skinItem.texture : pr && pr.skin, skinItem ? skinItem.slim : pr && pr.slim);
+  loadCapes();
 }
+
+/* ---------- capes (added in Admin → Launcher on the site) ---------- */
+async function drawCape(canvas, src) {
+  const c = canvas.getContext('2d'); c.imageSmoothingEnabled = false; c.clearRect(0, 0, canvas.width, canvas.height);
+  const img = await loadImg(src); if (!img) return;
+  const k = img.width / 64;   // cape textures are 64×32 (or a multiple); the back of the cape is 10×16 at (1,1)
+  c.drawImage(img, 1 * k, 1 * k, 10 * k, 16 * k, 0, 0, canvas.width, canvas.height);
+}
+async function loadCapes() {
+  const box = $('#prCapes'), list = $('#capeList');
+  const r = await cr.store();
+  const capes = r && r.ok ? (r.items || []).filter((it) => it.kind === 'cape' && it.owned) : [];
+  box.hidden = !capes.length;
+  if (!capes.length) return;
+  const pr = state.me && state.me.profile, on = pr ? pr.cape_item : null;
+  list.innerHTML = capes.map((it) => `<div class="cape${it.id === on ? ' on' : ''}"><canvas width="60" height="96" data-tex="${esc(it.texture)}"></canvas>
+    <b>${esc(it.name)}</b>${it.about ? `<small>${esc(it.about)}</small>` : ''}
+    <button class="btn ${it.id === on ? 'blue' : 'plain'}" data-cape="${it.id}"${pr ? '' : ' disabled title="Pick your in-game name first"'}>${it.id === on ? 'Wearing' : 'Wear'}</button></div>`).join('')
+    + (on ? '<div class="cape none"><span>No cape</span><button class="btn plain" data-cape="0">Take off</button></div>' : '');
+  list.querySelectorAll('canvas[data-tex]').forEach((cv) => drawCape(cv, cv.dataset.tex));
+}
+$('#capeList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-cape]'); if (!b || b.disabled) return;
+  const id = +b.dataset.cape, pr = state.me && state.me.profile;
+  if (pr && id && pr.cape_item === id) return;
+  b.disabled = true;
+  const r = await cr.equip('cape', id);
+  if (!r.ok) { b.disabled = false; return toast(r.error || 'Could not change the cape.'); }
+  if (state.me) state.me.profile = r.profile;
+  toast(id ? 'Cape on. It shows next time you start the game.' : 'Cape taken off.');
+  loadCapes();
+});
 $('#signin').addEventListener('submit', async (e) => {
   e.preventDefault(); $('#siBtn').disabled = true;
   const r = await cr.login($('#siLogin').value, $('#siPass').value);

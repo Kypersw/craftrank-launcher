@@ -1,1 +1,1 @@
-New Mods page: pick from the mods listed on CraftRank (Sodium, Iris, minimaps, zoom, JEI and many more) and install them in one click. The mods each one needs come along by themselves, every file is checked against Modrinth before it is kept, and mods go only into the version you picked (Fabric, Quilt, Forge or NeoForge).
+Capes: the capes added on CraftRank now show on the Account page. Pick one and press Wear; it shows in game next time you start it, and other players with this launcher see it too.
