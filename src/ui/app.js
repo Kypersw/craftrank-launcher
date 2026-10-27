@@ -238,35 +238,52 @@ async function renderAccount() {
 }
 
 /* ---------- capes (added in Admin → Launcher on the site) ---------- */
-async function drawCape(canvas, src) {
-  const c = canvas.getContext('2d'); c.imageSmoothingEnabled = false; c.clearRect(0, 0, canvas.width, canvas.height);
-  const img = await loadImg(src); if (!img) return;
-  const k = img.width / 64;   // cape textures are 64×32 (or a multiple); the back of the cape is 10×16 at (1,1)
-  c.drawImage(img, 1 * k, 1 * k, 10 * k, 16 * k, 0, 0, canvas.width, canvas.height);
-}
+// hundreds of capes: grouped by category, searchable, each picture drawn only when it scrolls into view
+const capeUi = { items: [], cat: 'All', q: '' };
+const capeIo = 'IntersectionObserver' in window ? new IntersectionObserver((es) => es.forEach((e) => {
+  if (!e.isIntersecting) return; capeIo.unobserve(e.target); drawCape(e.target, e.target.dataset.tex);
+}), { rootMargin: '300px' }) : null;
 async function loadCapes() {
-  const box = $('#prCapes'), list = $('#capeList');
   const r = await cr.store();
-  const capes = r && r.ok ? (r.items || []).filter((it) => it.kind === 'cape' && it.owned) : [];
-  box.hidden = !capes.length;
-  if (!capes.length) return;
-  const pr = state.me && state.me.profile, on = pr ? pr.cape_item : null;
-  list.innerHTML = capes.map((it) => `<div class="cape${it.id === on ? ' on' : ''}"><canvas width="60" height="96" data-tex="${esc(it.texture)}"></canvas>
-    <b>${esc(it.name)}</b>${it.about ? `<small>${esc(it.about)}</small>` : ''}
-    <button class="btn ${it.id === on ? 'blue' : 'plain'}" data-cape="${it.id}"${pr ? '' : ' disabled title="Pick your in-game name first"'}>${it.id === on ? 'Wearing' : 'Wear'}</button></div>`).join('')
-    + (on ? '<div class="cape none"><span>No cape</span><button class="btn plain" data-cape="0">Take off</button></div>' : '');
-  list.querySelectorAll('canvas[data-tex]').forEach((cv) => drawCape(cv, cv.dataset.tex));
+  capeUi.items = r && r.ok ? (r.items || []).filter((it) => it.kind === 'cape' && it.owned) : [];
+  $('#prCapes').hidden = !capeUi.items.length;
+  if (!capeUi.items.length) return;
+  const cats = {};
+  capeUi.items.forEach((it) => { const c = it.category || 'Other'; cats[c] = (cats[c] || 0) + 1; });
+  if (capeUi.cat !== 'All' && !cats[capeUi.cat]) capeUi.cat = 'All';
+  $('#capeCats').innerHTML = [['All', capeUi.items.length], ...Object.keys(cats).sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b)).map((c) => [c, cats[c]])]
+    .map(([c, n]) => `<button class="${c === capeUi.cat ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)} <em>${n}</em></button>`).join('');
+  renderCapes();
 }
-$('#capeList').addEventListener('click', async (e) => {
+function renderCapes() {
+  const pr = state.me && state.me.profile, on = pr ? pr.cape_item : null, q = capeUi.q.trim().toLowerCase();
+  const worn = capeUi.items.find((it) => it.id === on);
+  $('#capeNow').innerHTML = worn ? `Wearing <b>${esc(worn.name)}</b> <button class="btn plain sm" data-cape="0">Take off</button>` : 'No cape on';
+  const list = capeUi.items.filter((it) => (capeUi.cat === 'All' || (it.category || 'Other') === capeUi.cat) && (!q || it.name.toLowerCase().includes(q)));
+  $('#capeList').innerHTML = list.length ? list.map((it) => `<button class="cape${it.id === on ? ' on' : ''}" data-cape="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
+    <canvas width="50" height="80" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b><small>${it.id === on ? 'Wearing' : esc(it.category || 'Other')}</small></button>`).join('')
+    : '<p class="hint capes-none">No capes match your search.</p>';
+  $('#capeList').querySelectorAll('canvas[data-tex]').forEach((cv) => capeIo ? capeIo.observe(cv) : drawCape(cv, cv.dataset.tex));
+  $('#capeHint').hidden = !!pr;
+}
+$('#capeCats').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cat]'); if (!b) return;
+  capeUi.cat = b.dataset.cat;
+  $('#capeCats').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  renderCapes();
+});
+$('#capeQ').addEventListener('input', (e) => { capeUi.q = e.target.value; renderCapes(); });
+$('#prCapes').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-cape]'); if (!b || b.disabled) return;
   const id = +b.dataset.cape, pr = state.me && state.me.profile;
-  if (pr && id && pr.cape_item === id) return;
+  if (!pr) return toast('Pick your in-game name first.');
+  if (id && pr.cape_item === id) return;
   b.disabled = true;
   const r = await cr.equip('cape', id);
   if (!r.ok) { b.disabled = false; return toast(r.error || 'Could not change the cape.'); }
   if (state.me) state.me.profile = r.profile;
   toast(id ? 'Cape on. It shows next time you start the game.' : 'Cape taken off.');
-  loadCapes();
+  renderCapes();
 });
 $('#signin').addEventListener('submit', async (e) => {
   e.preventDefault(); $('#siBtn').disabled = true;

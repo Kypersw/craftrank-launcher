@@ -314,12 +314,24 @@ input[type=range] { accent-color: var(--br); }
 .pr-capes { grid-column: 1 / -1; display: grid; gap: 14px; }
 .pc-h h3 { margin: 0; color: var(--hi); font: 600 18px Cond, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
 .pc-h .hint { margin: 4px 0 0; }
-.capes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.cape { display: grid; justify-items: center; gap: 8px; padding: 16px 12px; border-radius: 3px; background: rgba(255,255,255,.03); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
-.cape.on { box-shadow: inset 0 0 0 2px var(--br); }
-.cape canvas { width: 60px; height: 96px; image-rendering: pixelated; filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
-.cape b { color: var(--hi); font-size: 14px; }
-.cape small { color: var(--tx2); font-size: 12px; line-height: 1.4; }
-.cape .btn { width: 100%; }
-.cape.none { align-content: center; }
-.cape.none span { color: var(--tx2); font-size: 13px; }
+.cape-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cape-now { color: var(--tx2); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.cape-now b { color: var(--hi); }
+.cape-now .btn.sm { padding: 5px 10px; font-size: 12px; }
+.cape-bar .cape-q { width: 240px; }
+.cape-cats { display: flex; gap: 6px; flex-wrap: wrap; }
+.cape-cats button { border: 0; border-radius: 3px; padding: 6px 11px; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px var(--line); color: var(--tx); font: inherit; font-size: 12.5px; cursor: pointer; }
+.cape-cats button em { font-style: normal; color: var(--tx2); margin-left: 2px; }
+.cape-cats button:hover { background: rgba(255,255,255,.08); }
+.cape-cats button.on { background: var(--br); box-shadow: none; color: #04120a; }
+.cape-cats button.on em { color: inherit; opacity: .7; }
+.capes { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; max-height: 560px; overflow-y: auto; padding: 2px 4px 2px 2px; }
+.cape { display: grid; justify-items: center; align-content: start; gap: 4px; padding: 12px 6px 10px; border: 0; border-radius: 3px; background: rgba(255,255,255,.03); box-shadow: inset 0 0 0 1px var(--line); text-align: center; font: inherit; color: inherit; cursor: pointer; min-width: 0; }
+.cape:hover:not(:disabled) { background: rgba(255,255,255,.07); }
+.cape:disabled { cursor: default; opacity: .6; }
+.cape.on { box-shadow: inset 0 0 0 2px var(--br); background: rgba(255,255,255,.06); }
+.cape canvas { width: 50px; height: 80px; margin-bottom: 4px; image-rendering: pixelated; filter: drop-shadow(0 5px 8px rgba(0,0,0,.5)); }
+.cape b { color: var(--hi); font-size: 12.5px; line-height: 1.25; overflow-wrap: anywhere; }
+.cape small { color: var(--tx2); font-size: 11px; }
+.cape.on small { color: var(--br); }
+.capes-none { grid-column: 1 / -1; }

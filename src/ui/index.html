@@ -141,7 +141,10 @@
             <div class="row-btns"><button class="btn plain" id="prLogout">Sign out</button></div>
           </div>
           <div class="box pr-capes" id="prCapes" hidden>
-            <div class="pc-h"><h3>Capes</h3><p class="hint">Free capes from CraftRank. The one you wear shows in game, and other players with this launcher see it too.</p></div>
+            <div class="pc-h"><h3>Capes</h3><p class="hint">Free capes from CraftRank. Click one to wear it: it shows in game, and other players with this launcher see it too.</p></div>
+            <div class="cape-bar"><span class="cape-now" id="capeNow"></span><label class="search cape-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="capeQ" placeholder="Search capes" spellcheck="false" aria-label="Search capes"></label></div>
+            <div class="cape-cats" id="capeCats" role="group" aria-label="Cape categories"></div>
+            <p class="hint" id="capeHint" hidden>Save an in-game name above to wear a cape.</p>
             <div class="capes" id="capeList"></div>
           </div>
         </div>

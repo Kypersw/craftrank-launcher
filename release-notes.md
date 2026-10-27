@@ -1,1 +1,1 @@
-Capes: the capes added on CraftRank now show on the Account page. Pick one and press Wear; it shows in game next time you start it, and other players with this launcher see it too.
+Capes: hundreds of new free capes (flags, colours, patterns, emblems, materials and more). The Account page now sorts them into categories with a search box; click a cape to wear it, it shows in game next time you start it.
