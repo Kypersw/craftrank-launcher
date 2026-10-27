@@ -240,6 +240,24 @@ async function catalog() {
 }
 
 /** Loader versions for one Minecraft version; [] when the loader does not exist for it. */
+/** CraftBoost: which loader makes plain Minecraft faster for this version: {loader, lv} or null */
+const boostVia = {};
+async function boostLoader(mc) {
+  if (mc in boostVia) return boostVia[mc];
+  let via = null;
+  try {
+    const sod = await getJson('https://api.modrinth.com/v2/project/sodium/version?loaders=' + encodeURIComponent('["fabric"]') + '&game_versions=' + encodeURIComponent(JSON.stringify([mc])));
+    const lv = sod.length ? (await loaderVersions('fabric', mc))[0] : '';
+    if (lv) via = { loader: 'fabric', lv };
+    else {
+      const of = ((await optifineList())[mc] || [])[0];
+      if (of && of.file) via = { loader: 'optifine', lv: of.file };
+    }
+    boostVia[mc] = via;
+  } catch (e) {}
+  return via;
+}
+
 async function loaderVersions(loader, mc) {
   try {
     if (loader === 'optifine' || loader === 'forge-optifine') return ((await optifineList())[mc] || []).map((x) => x.file);
@@ -308,8 +326,11 @@ async function ensureAgent(root) {
  *  optifine: the OptiFine features (shaders, connected textures, zoom, custom entity models,
  *            dynamic lights) rebuilt from open mods, because OptiFine itself may not be redistributed
  */
+const FABRIC_API = 'P7dR8mSH';
 const PACKS = {
-  perf: { name: 'Performance', need: ['sodium'], extra: ['lithium', 'ferrite-core', 'entityculling', 'immediatelyfast', 'modernfix'] },
+  // v2: Dynamic FPS (no frames wasted while the game is in the background), More Culling (leaves, blocks
+  // behind blocks), BadOptimizations (less work per frame on lightmap, sky and particles)
+  perf: { name: 'Performance', v: 2, need: ['sodium'], extra: ['lithium', 'ferrite-core', 'entityculling', 'immediatelyfast', 'modernfix', 'dynamic-fps', 'moreculling', 'badoptimizations'] },
   optifine: { name: 'OptiFine features', need: ['sodium', 'iris'], extra: ['continuity', 'zoomify', 'entity-model-features', 'entitytexturefeatures', 'lambdynamiclights', 'lithium', 'ferrite-core', 'sodium-extra', 'reeses-sodium-options'] },
 };
 async function syncPack(instDir, mc, loader, pack, progress) {
@@ -319,11 +340,11 @@ async function syncPack(instDir, mc, loader, pack, progress) {
   try { state = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch (e) {}
   const remove = () => { (state.files || []).forEach((f) => { try { fs.unlinkSync(path.join(mods, safeName(f))); } catch (e) {} }); state = {}; };
   const def = PACKS[pack];
-  if (!def || loader === 'vanilla' || loader === 'forge') {
+  if (!def || !['fabric', 'quilt', 'neoforge'].includes(loader)) {
     remove(); fs.mkdirSync(instDir, { recursive: true }); fs.writeFileSync(statePath, '{}');
     return { installed: false, reason: def && loader !== 'vanilla' ? 'Mod packs are made for Fabric, Quilt and NeoForge. Pick one of those.' : def ? 'Pick Fabric to use the ' + def.name + ' pack.' : '' };
   }
-  const key = mc + '|' + loader + '|' + pack;
+  const key = mc + '|' + loader + '|' + pack + '|' + (def.v || 1);
   if (state.key === key && (state.files || []).every((f) => fs.existsSync(path.join(mods, f)))) return { installed: true };
   remove();
   const loaders = loader === 'neoforge' ? ['neoforge'] : ['fabric', 'quilt'].filter((l) => loader === 'quilt' || l === 'fabric');
@@ -331,13 +352,15 @@ async function syncPack(instDir, mc, loader, pack, progress) {
   const all = def.need.concat(def.extra);
   for (let i = 0; i < all.length; i++) {
     const slug = all[i];
-    progress('Mod pack: ' + slug, Math.round(i / all.length * 100));
+    progress('Mod pack: ' + (i < def.need.length + def.extra.length ? slug : 'extra files'), Math.round(i / all.length * 100));
     let list = [];
     try { list = await getJson('https://api.modrinth.com/v2/project/' + slug + '/version?loaders=' + encodeURIComponent(JSON.stringify(loaders)) + '&game_versions=' + encodeURIComponent(JSON.stringify([mc]))); } catch (e) { list = []; }
     if (!list.length) {
       if (def.need.includes(slug)) { files.forEach((f) => { try { fs.unlinkSync(path.join(mods, f)); } catch (e) {} }); return { installed: false, reason: 'The ' + def.name + ' pack is not out for Minecraft ' + mc + ' yet.' }; }
       continue;
     }
+    // mods this one needs (Fabric API comes below)
+    for (const d of list[0].dependencies || []) if (d.dependency_type === 'required' && d.project_id && d.project_id !== FABRIC_API && !all.includes(d.project_id)) all.push(d.project_id);
     const file = list[0].files.find((f) => f.primary) || list[0].files[0];
     const fname = safeName(file.filename);
     await download(file.url, path.join(mods, fname), null, file.hashes);
@@ -390,7 +413,15 @@ async function prepare(root, opts, progress) {
   let loader = LOADERS.includes(opts.loader) ? opts.loader : 'vanilla';
   // The folder (worlds, settings) stays the one of the picked version, even when it runs with a loader below.
   const dirLoader = loader;
-  if (loader !== 'vanilla') {
+  // CraftBoost on plain Minecraft: it runs on Fabric with the performance mods (Sodium and friends), or on
+  // OptiFine for versions Sodium does not cover. Same folder, worlds and settings. If that cannot be set up,
+  // plain Minecraft starts as before.
+  let boosted = false;
+  if (loader === 'vanilla' && opts.boost && opts.pack === 'perf') {
+    const via = await boostLoader(opts.mc);
+    if (via) { loader = via.loader; opts = Object.assign({}, opts, { loaderVersion: via.lv }); boosted = true; }
+  }
+  if (loader !== 'vanilla') try {
     let lv = opts.loaderVersion;
     if (!lv) lv = (await loaderVersions(loader, opts.mc))[0];
     if (!lv) throw new Error((loader[0].toUpperCase() + loader.slice(1)) + ' is not available for Minecraft ' + opts.mc + '.');
@@ -410,6 +441,9 @@ async function prepare(root, opts, progress) {
     const resolved = await Version.parse(new MinecraftFolder(root), id);
     const d = installDependenciesTask(resolved, DL);
     await d.startAndWait({ onUpdate() { if (d.total) progress('Downloading libraries', Math.round(d.progress / d.total * 100)); } });
+  } catch (e) {
+    if (!boosted) throw e;
+    loader = 'vanilla'; id = opts.mc;
   }
   const instDir = instanceDir(root, opts.mc, dirLoader);
   fs.mkdirSync(instDir, { recursive: true });
@@ -421,7 +455,7 @@ async function prepare(root, opts, progress) {
   }
   if (opts.boost) { try { applyBoost(instDir, opts.mc, opts.boost); } catch (e) {} }
   const pack = await syncPack(instDir, opts.mc, loader, opts.pack || 'none', progress);
-  await syncMods(root, opts.mc, loader, progress);
+  if (!boosted) await syncMods(root, opts.mc, loader, progress);
   // Skins on servers come from the CraftRank Skin Agent now (see start): the old skin mod is removed
   const skins = await syncSkinMod(instDir, opts.mc, loader, '', progress);
   if (opts.skinRoot) skins.on = true;
@@ -459,6 +493,14 @@ function applyBoost(instDir, mc, boost) {
   set('maxFps', 260);
   fs.mkdirSync(instDir, { recursive: true });
   fs.writeFileSync(opt, lines.join('\n') + '\n');
+  // OptiFine's own speed settings (used when the version runs on OptiFine)
+  const ofF = path.join(instDir, 'optionsof.txt');
+  let of = []; try { of = fs.readFileSync(ofF, 'utf8').split(/\r?\n/).filter((l) => l !== ''); } catch (e) {}
+  const ofSet = (k, v) => { const i = of.findIndex((l) => l.startsWith(k + ':')); if (i >= 0) of[i] = k + ':' + v; else of.push(k + ':' + v); };
+  ofSet('ofFastRender', true); ofSet('ofFastMath', true); ofSet('ofSmartAnimations', true); ofSet('ofRenderRegions', true);
+  ofSet('ofSmoothFps', false); ofSet('ofLazyChunkLoading', true); ofSet('ofDynamicFov', true);
+  if (boost.tier === 'low') { ofSet('ofAnimatedWater', 2); ofSet('ofAnimatedLava', 2); ofSet('ofAnimatedPortal', false); ofSet('ofVoidParticles', false); ofSet('ofSky', false); ofSet('ofTrees', 1); }
+  fs.writeFileSync(ofF, of.join('\n') + '\n');
   fs.writeFileSync(markF, JSON.stringify({ tier: boost.tier, at: Date.now() }));
   return true;
 }
@@ -687,6 +729,21 @@ function skinAgent(root) {
   } catch (e) { return null; }
 }
 
+/**
+ * CraftBoost on Windows: Java runs on the fast graphics card. Laptops with two cards (Intel/AMD built in plus
+ * NVIDIA/AMD) otherwise often run Minecraft on the slow built-in one. Same as the per-app choice in
+ * Windows Settings > Display > Graphics, set for this Java only.
+ */
+function highPerformanceGpu(java) {
+  if (process.platform !== 'win32' || !java) return;
+  const dir = path.dirname(java);
+  for (const exe of ['javaw.exe', 'java.exe']) {
+    const f = path.join(dir, exe);
+    if (!fs.existsSync(f)) continue;
+    try { require('child_process').execFile('reg', ['add', 'HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences', '/v', f, '/t', 'REG_SZ', '/d', 'GpuPreference=2;', '/f'], { windowsHide: true }, () => {}); } catch (e) {}
+  }
+}
+
 /** Starts the game. account: {name, uuid, token, type}: 'msa' = Microsoft, 'mojang' = CraftRank profile (skin agent). */
 async function start(root, prep, account, opts) {
   const agent = opts.skinServer ? await ensureAgent(root) : null;
@@ -695,13 +752,17 @@ async function start(root, prep, account, opts) {
   const skins = opts.skinRoot ? skinAgent(root) : null;
   if (skins) extraJVMArgs.push('-javaagent:' + skins + '=' + opts.skinRoot);
   if (opts.boost) extraJVMArgs.push(...BOOST_JVM);
+  if (opts.boost) highPerformanceGpu(prep.java);
+  const quickPlay = mcAtLeast(String(prep.id).split('-')[0], 20);
   const proc = await launch({
     gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id,
     gameProfile: { name: account.name, id: account.uuid }, accessToken: account.token || account.uuid, userType: account.type || 'mojang',
     maxMemory: opts.memory, minMemory: opts.boost ? Math.floor(opts.memory / 2) : Math.min(1024, opts.memory),
     launcherName: 'CraftRank', launcherBrand: 'CraftRank Launcher',
     extraJVMArgs, extraExecOption: { detached: false },
-    server: opts.server && opts.server.host ? { ip: opts.server.host, port: opts.server.port || 25565 } : undefined,
+    // Minecraft 1.20 and newer ignore --server: they join with --quickPlayMultiplayer
+    server: opts.server && opts.server.host && !quickPlay ? { ip: opts.server.host, port: opts.server.port || 25565 } : undefined,
+    extraMCArgs: opts.server && opts.server.host && quickPlay ? ['--quickPlayMultiplayer', opts.server.host + ':' + (opts.server.port || 25565)] : undefined,
   });
   proc.skinsOff = !!opts.skinServer && !agent;
   // CraftBoost: the game gets a bit more CPU time than background apps

@@ -154,7 +154,15 @@ final class Anim {
     }
 
     /** Once a frame, right before the picture is shown. */
+    // -Dcraftrank.fps.log=true: frames per second in the log every 10 seconds (for comparing settings)
+    private static final boolean FPS = Boolean.getBoolean("craftrank.fps.log");
+    private static long fpsSince, fpsFrames;
     static Object swap(Object glClass) {
+        if (FPS) {
+            fpsFrames++; long now = System.nanoTime();
+            if (fpsSince == 0) fpsSince = now;
+            else if (now - fpsSince > 10_000_000_000L) { Log.info(String.format("fps: %.1f", fpsFrames * 1e9 / (now - fpsSince))); fpsFrames = 0; fpsSince = now; }
+        }
         if (!any) return null;
         try {
             for (Strip s; (s = ready.poll()) != null; ) {
