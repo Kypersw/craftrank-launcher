@@ -325,7 +325,7 @@ ipcMain.handle('play', async (e, opts) => {
     const floor = loader === 'vanilla' ? 1024 : boost ? (ram >= 15000 ? 4096 : ram >= 7500 ? 3072 : 2048) : 2048;
     const memory = Math.min(Math.max(s.memory, floor), Math.max(1024, Math.floor(ram * 0.6 / 512) * 512));
     const srv = opts.server && typeof opts.server.host === 'string' ? opts.server : null;
-    running = await game.start(ROOT, prep, acct, { memory, server: srv ? { host: srv.host, port: +srv.port || 25565 } : null, skinServer, boost: !!boost });
+    running = await game.start(ROOT, prep, acct, { memory, server: srv ? { host: srv.host, port: +srv.port || 25565 } : null, skinServer, skinRoot, boost: !!boost });
     presence('play', {
       since: Date.now(), version: 'Minecraft ' + mc + (picked !== 'vanilla' ? ' · ' + picked[0].toUpperCase() + picked.slice(1) : ''),
       server: srv ? { name: String(srv.name || srv.host).slice(0, 60), address: srv.host + (+srv.port && +srv.port !== 25565 ? ':' + +srv.port : ''), icon: srv.icon, url: srv.url } : null,

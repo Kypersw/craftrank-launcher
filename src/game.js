@@ -390,14 +390,6 @@ async function prepare(root, opts, progress) {
   let loader = LOADERS.includes(opts.loader) ? opts.loader : 'vanilla';
   // The folder (worlds, settings) stays the one of the picked version, even when it runs with a loader below.
   const dirLoader = loader;
-  // Skins on servers need CustomSkinLoader, a mod. Release has no mod loader, so with skins on it runs
-  // on Fabric with only the skin mod (and CraftBoost's performance mods). The game plays the same.
-  // OptiFine is not changed: OptiFine as a Forge mod crashed on new versions (1.21.x).
-  if (opts.skinRoot && loader === 'vanilla') {
-    try {
-      if (await cslAvailable(opts.mc, 'fabric') && (await loaderVersions('fabric', opts.mc))[0]) { loader = 'fabric'; opts.loaderVersion = ''; }
-    } catch (e) { loader = dirLoader; }
-  }
   if (loader !== 'vanilla') {
     let lv = opts.loaderVersion;
     if (!lv) lv = (await loaderVersions(loader, opts.mc))[0];
@@ -430,7 +422,9 @@ async function prepare(root, opts, progress) {
   if (opts.boost) { try { applyBoost(instDir, opts.mc, opts.boost); } catch (e) {} }
   const pack = await syncPack(instDir, opts.mc, loader, opts.pack || 'none', progress);
   await syncMods(root, opts.mc, loader, progress);
-  const skins = await syncSkinMod(instDir, opts.mc, loader, opts.skinRoot || '', progress);
+  // Skins on servers come from the CraftRank Skin Agent now (see start): the old skin mod is removed
+  const skins = await syncSkinMod(instDir, opts.mc, loader, '', progress);
+  if (opts.skinRoot) skins.on = true;
   return { id, java, instDir, pack, skins, loader };
 }
 
@@ -677,11 +671,29 @@ async function syncMods(root, mc, loader, progress) {
   for (const id of top) { try { await installMod(root, mc, loader, id, (n) => progress('Mods: ' + n, 0)); } catch (e) {} }
 }
 
+/**
+ * The CraftRank Skin Agent (agent/ in the source, built to src/agent/craftrank-skins.jar): shows CraftRank skins
+ * and capes on every server and every version (vanilla, OptiFine, Forge, Fabric…) without a mod.
+ * Java cannot read it from inside the app archive, so it is copied next to the game files.
+ */
+function skinAgent(root) {
+  try {
+    const src = path.join(__dirname, 'agent', 'craftrank-skins.jar'), to = path.join(root, 'craftrank-skins.jar');
+    const buf = fs.readFileSync(src);
+    let same = false;
+    try { same = sha256(to) === crypto.createHash('sha256').update(buf).digest('hex'); } catch (e) {}
+    if (!same) { fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(to, buf); }
+    return to;
+  } catch (e) { return null; }
+}
+
 /** Starts the game. account: {name, uuid, token, type}: 'msa' = Microsoft, 'mojang' = CraftRank profile (skin agent). */
 async function start(root, prep, account, opts) {
   const agent = opts.skinServer ? await ensureAgent(root) : null;
   const extraJVMArgs = [];
   if (agent) extraJVMArgs.push('-javaagent:' + agent + '=' + opts.skinServer, '-Dauthlibinjector.side=client');
+  const skins = opts.skinRoot ? skinAgent(root) : null;
+  if (skins) extraJVMArgs.push('-javaagent:' + skins + '=' + opts.skinRoot);
   if (opts.boost) extraJVMArgs.push(...BOOST_JVM);
   const proc = await launch({
     gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id,
