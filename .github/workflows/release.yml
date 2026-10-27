@@ -78,6 +78,10 @@ jobs:
           npm test
           npm audit --omit=dev --audit-level=high
 
+      - name: Use our portable template
+        if: steps.ver.outputs.build == 'yes'
+        run: node build/portable-template.js
+
       - name: Build portable and installer
         if: steps.ver.outputs.build == 'yes'
         run: npx electron-builder --win portable nsis --x64 --publish never

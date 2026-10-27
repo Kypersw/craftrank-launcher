@@ -148,8 +148,23 @@ ipcMain.handle('news', async () => {
 });
 app.setName('CraftRank Launcher');
 if (process.platform === 'win32') app.setAppUserModelId('org.craftrank.launcher');   // taskbar groups it as CraftRank, with its icon
+// the portable .exe unpacks each version once into "CraftRank Launcher Portable\<version>" (build/portable.nsi):
+// remove the folders of older versions, a while after start
+function cleanPortable() {
+  if (!process.env.PORTABLE_EXECUTABLE_FILE) return;
+  const mine = path.dirname(process.execPath), root = path.dirname(mine);
+  if (path.basename(root) !== 'CraftRank Launcher Portable') return;
+  let names = []; try { names = fs.readdirSync(root); } catch (e) { return; }
+  for (const n of names) {
+    const dir = path.join(root, n);
+    if (dir === mine || !/^\d+\.\d+\.\d+$/.test(n)) continue;
+    try { fs.rmSync(path.join(dir, '.ready'), { force: true }); fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {}
+  }
+}
+
 app.whenReady().then(() => {
   if (swapping) return;
+  setTimeout(cleanPortable, 60000);
   // the launcher needs no browser permissions (camera, microphone, notifications, location…): refuse them all
   const { session } = require('electron');
   session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(false));
