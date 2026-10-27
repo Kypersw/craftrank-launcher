@@ -19,12 +19,19 @@ final class Textures {
         boolean empty() { return skin == null && cape == null; }
     }
     static final Entry NONE = new Entry(null, false, null);
+    private static final Entry BUSY = new Entry(null, false, null);   // no answer this time: ask again a minute later
 
     private static String root;
     private static final ConcurrentHashMap<String, Entry> cache = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, Future<Entry>> loading = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, CompletableFuture<Entry>> loading = new ConcurrentHashMap<>();
+    // names waiting for the next batch request (a full server is one request instead of hundreds)
+    private static final ConcurrentLinkedQueue<String> queue = new ConcurrentLinkedQueue<>();
+    private static final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(r -> { Thread t = new Thread(r, "CraftRank Skins batch"); t.setDaemon(true); return t; });
+    private static final java.util.concurrent.atomic.AtomicBoolean flushing = new java.util.concurrent.atomic.AtomicBoolean();
+    private static volatile boolean batchOff;      // an older CraftRank site without the batch address
+    private static volatile long quietUntil;       // the site asked us to slow down (429)
     private static final ExecutorService pool = Executors.newFixedThreadPool(4, r -> { Thread t = new Thread(r, "CraftRank Skins"); t.setDaemon(true); return t; });
-    private static final long FOUND_MS = 5 * 60_000, MISS_MS = 2 * 60_000;
+    private static final long FOUND_MS = 10 * 60_000, MISS_MS = 10 * 60_000, BUSY_MS = 60_000;
     private static final Pattern NAME = Pattern.compile("^[A-Za-z0-9_]{1,16}$");
 
     static void init(String r) { root = r; }
@@ -35,7 +42,7 @@ final class Textures {
     static Entry cached(String name) {
         Entry e = cache.get(name.toLowerCase());
         if (e == null) return null;
-        if (System.currentTimeMillis() - e.at > (e.empty() ? MISS_MS : FOUND_MS)) return null;
+        if (System.currentTimeMillis() - e.at > (e == BUSY ? BUSY_MS : e.empty() ? MISS_MS : FOUND_MS)) return null;
         return e;
     }
 
@@ -50,13 +57,94 @@ final class Textures {
     /** Starts loading in the background (for callers on the render thread). */
     static Future<Entry> start(String name) {
         String key = name.toLowerCase();
-        return loading.computeIfAbsent(key, k -> pool.submit(() -> {
-            Entry e;
-            try { e = fetch(name); } catch (Throwable t) { e = NONE; }
-            cache.put(key, e);
-            loading.remove(key);
-            return e;
-        }));
+        return loading.computeIfAbsent(key, k -> {
+            CompletableFuture<Entry> f = new CompletableFuture<>();
+            queue.add(name);
+            if (flushing.compareAndSet(false, true)) timer.schedule(Textures::flush, 150, TimeUnit.MILLISECONDS);
+            return f;
+        });
+    }
+
+    private static void done(String name, Entry e) {
+        String key = name.toLowerCase();
+        cache.put(key, e);
+        CompletableFuture<Entry> f = loading.remove(key);
+        if (f != null) f.complete(e == BUSY ? NONE : e);
+    }
+
+    /** Sends the waiting names, up to 100 per request. */
+    private static void flush() {
+        try {
+            while (true) {
+                java.util.List<String> names = new java.util.ArrayList<>();
+                for (String n; names.size() < 100 && (n = queue.poll()) != null; ) names.add(n);
+                if (names.isEmpty()) break;
+                if (System.currentTimeMillis() < quietUntil) { for (String n : names) done(n, BUSY); continue; }
+                if (!batchOff) {
+                    try { batch(names); continue; }
+                    catch (NoBatch nb) { batchOff = true; }
+                    catch (Throwable t) { for (String n : names) done(n, BUSY); continue; }
+                }
+                for (String n : names) pool.submit(() -> { Entry e; try { e = fetch(n); } catch (Throwable t) { e = BUSY; } done(n, e); });
+            }
+        } finally {
+            flushing.set(false);
+            if (!queue.isEmpty() && flushing.compareAndSet(false, true)) timer.schedule(Textures::flush, 150, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private static final class NoBatch extends Exception {}
+
+    /** POST {root}craftrank/textures {"names": [...]} -> {"players": {"name": {"SKIN": {...}, "CAPE": {...}}}} */
+    private static void batch(java.util.List<String> names) throws Exception {
+        StringBuilder body = new StringBuilder("{\"names\":[");
+        for (int i = 0; i < names.size(); i++) body.append(i > 0 ? "," : "").append('"').append(names.get(i)).append('"');
+        body.append("]}");
+        HttpURLConnection c = (HttpURLConnection) new URL(root + "craftrank/textures").openConnection();
+        c.setConnectTimeout(4000); c.setReadTimeout(6000);
+        c.setRequestMethod("POST"); c.setDoOutput(true);
+        c.setRequestProperty("User-Agent", "CraftRankSkins/1.2");
+        c.setRequestProperty("Content-Type", "application/json");
+        c.setRequestProperty("Accept", "application/json");
+        c.getOutputStream().write(body.toString().getBytes(StandardCharsets.UTF_8));
+        int code = c.getResponseCode();
+        if (code == 404 || code == 405 || code == 501) throw new NoBatch();
+        if (code == 429) { quietUntil = System.currentTimeMillis() + 60_000; for (String n : names) done(n, BUSY); return; }
+        if (code != 200) throw new Exception("HTTP " + code);
+        String json;
+        try (InputStream in = c.getInputStream()) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] b = new byte[8192]; int n;
+            while ((n = in.read(b)) > 0) { out.write(b, 0, n); if (out.size() > 1 << 20) break; }
+            json = new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
+        if (!json.contains("\"players\"")) throw new NoBatch();   // not our API (a challenge page, another server)
+        int found = 0;
+        for (String n : names) {
+            String tex = object(json, "\"" + n.toLowerCase() + "\"");
+            Entry e = tex == null ? NONE : parse(tex);
+            if (!e.empty()) found++;
+            done(n, e);
+        }
+        Log.info(names.size() + " players asked, " + found + " with CraftRank skins");
+    }
+
+    /** The {...} that follows a key in a JSON text, or null. */
+    private static String object(String json, String key) {
+        int i = json.indexOf(key + ":");
+        if (i < 0) i = json.indexOf(key + " :");
+        if (i < 0) return null;
+        int a = json.indexOf('{', i + key.length());
+        if (a < 0) return null;
+        int depth = 0; boolean str = false;
+        for (int j = a; j < json.length(); j++) {
+            char ch = json.charAt(j);
+            if (str) { if (ch == '\\') j++; else if (ch == '"') str = false; continue; }
+            if (ch == '"') str = true;
+            else if (ch == '{') depth++;
+            else if (ch == '}' && --depth == 0) return json.substring(a, j + 1);
+        }
+        return null;
     }
 
     /** CraftRank keeps a player's profile under the offline UUID of the name, the same one offline servers use. */
@@ -68,7 +156,11 @@ final class Textures {
             m = Pattern.compile("\"value\"\\s*:\\s*\"([A-Za-z0-9+/=]+)\"").matcher(json);
             if (!m.find()) return NONE;
         }
-        String tex = new String(Base64.getDecoder().decode(m.group(1)), StandardCharsets.UTF_8);
+        return parse(new String(Base64.getDecoder().decode(m.group(1)), StandardCharsets.UTF_8));
+    }
+
+    /** Textures JSON ({"SKIN": {...}, "CAPE": {...}}) to an entry; starts loading an animated cape. */
+    private static Entry parse(String tex) {
         String skin = url(tex, "SKIN"), cape = url(tex, "CAPE");
         boolean slim = Pattern.compile("\"SKIN\"\\s*:\\s*\\{[^}]*\"model\"\\s*:\\s*\"slim\"").matcher(tex).find();
         Entry e = new Entry(skin, slim, cape);
@@ -78,7 +170,6 @@ final class Textures {
             Matcher f = Pattern.compile("\"fps\"\\s*:\\s*\"?(\\d+)").matcher(tex);
             Anim.want(a.group(1).replace("\\/", "/"), f.find() ? Integer.parseInt(f.group(1)) : 12);
         }
-        Log.info(name + ": " + (e.empty() ? "no CraftRank skin" : (skin != null ? "skin" : "") + (cape != null ? (skin != null ? " + " : "") + "cape" : "")));
         return e;
     }
 
