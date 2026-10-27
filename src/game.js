@@ -491,6 +491,9 @@ async function syncSkinMod(instDir, mc, loader, root, progress) {
   const ml = { fabric: 'fabric', quilt: 'quilt', forge: 'forge', 'forge-optifine': 'forge', neoforge: 'neoforge' }[loader];
   const drop = () => { if (st.file) try { fs.unlinkSync(path.join(mods, safeName(st.file))); } catch (e) {} st = {}; try { fs.writeFileSync(statePath, '{}'); } catch (e) {} };
   if (!root || !/^https:\/\/\S+\/$/.test(root) || !ml) { drop(); return { on: false, reason: root && !ml ? 'loader' : '' }; }
+  // CustomSkinLoader together with OptiFine on Forge crashes from 1.20.2 on (OptiFine checks that textures
+  // are made on the render thread, the skin mod makes them in the background): no skin mod there.
+  if (loader === 'forge-optifine' && mcAtLeast(mc, 20, 2)) { drop(); return { on: false, reason: 'optifine' }; }
   const key = mc + '|' + ml;
   if (!(st.key === key && st.file && fs.existsSync(path.join(mods, safeName(st.file))))) {
     drop();

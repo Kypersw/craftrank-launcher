@@ -1,1 +1,1 @@
-Fixed: OptiFine versions crashed at start in 1.8.1. OptiFine runs as before again. For CraftRank skins on servers with OptiFine, pick ForgeOptiFine, or Fabric with the OptiFine features. CraftBoost and the rest of 1.8.1 stay.
+Fixed: ForgeOptiFine on Minecraft 1.20.2 and newer could crash when a player with a skin came near (OptiFine and the skin mod did not work together). The skin mod is no longer added there; for CraftRank skins on servers with OptiFine features, pick Fabric with the OptiFine features.

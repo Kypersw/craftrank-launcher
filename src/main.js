@@ -264,7 +264,8 @@ ipcMain.handle('loaderVersions', safe(async (e, loader, mc) => ({ ok: true, vers
 
 function skinNote(k) {
   if (!k || k.on) return '';
-  if (k.reason === 'loader') return 'CraftRank skins show on servers with Fabric, Quilt, Forge or NeoForge versions. With Vanilla or OptiFine you see them only in singleplayer.';
+  if (k.reason === 'loader') return 'CraftRank skins show on servers with Fabric, Quilt, Forge or NeoForge versions. With OptiFine, pick Fabric with the OptiFine features to see them.';
+  if (k.reason === 'optifine') return 'With OptiFine, CraftRank skins on servers do not work on this Minecraft version. Pick Fabric with the OptiFine features to see them.';
   if (k.reason === 'version') return 'CraftRank skins on servers are not out for this Minecraft version yet.';
   if (k.reason === 'download') return 'CraftRank skins on servers are off this time: the skin mod could not be downloaded.';
   return '';
