@@ -220,8 +220,8 @@ cr.on('game', (g) => {
 });
 
 /* ---------- account ---------- */
-async function loadMe() {
-  const r = await cr.me();
+async function loadMe(cached) {
+  const r = cached || await cr.me();
   state.me = r.ok ? r : null;
   const pr = state.me && state.me.profile;
   $('#useCr').closest('.bchk').hidden = !pr;
@@ -671,15 +671,34 @@ async function refreshAll() {
     state.versions = v.versions; state.latest = v.latest;
     verLabel();
   });
-  const cfg = await cr.config(); state.cfg = cfg.ok ? cfg : {};
-  boot(55, 'Loading servers from CraftRank…');
-  await refreshAll();
-  boot(80, 'Loading your profile…');
-  await loadMe();
-  boot(92, 'Almost ready…');
-  await Promise.race([loadNews(), new Promise((ok) => setTimeout(ok, 2500))]);
-  idleStatus();
-  boot(100, 'Ready');
+  // what we saw last time shows at once; fresh data comes in behind it
+  const cache = (await cr.bootCache().catch(() => null)) || {};
+  const fresh = async () => {
+    const [cfg] = await Promise.all([
+      cr.config().then((c) => { if (c.ok) state.cfg = c; return c; }),
+      refreshAll(),
+      // offline for a moment: keep showing the saved profile instead of looking signed out
+      cr.me().then((r) => loadMe(r.ok || !cache.me || r.status === 401 || r.error === 'signed_out' ? r : cache.me)),
+    ]);
+    return cfg;
+  };
+  if (cache.feed && cache.feed.servers) {
+    state.cfg = cache.config || {};
+    state.feed = cache.feed; renderServers(); renderResources(); renderAds();
+    boot(80, 'Loading your profile…');
+    if (cache.me) await loadMe(cache.me);
+    idleStatus();
+    boot(100, 'Ready');
+    fresh().then(() => idleStatus());
+  } else {
+    // first start: nothing saved yet, ask for everything at the same time
+    boot(55, 'Loading servers from CraftRank…');
+    await fresh();
+    state.cfg = state.cfg || {};
+    idleStatus();
+    boot(100, 'Ready');
+  }
+  loadNews();
   setTimeout(() => checkUpdate(info), 1500);
   setInterval(() => checkUpdate(info), 20 * 60 * 1000);
   setInterval(async () => { const f = await cr.feed(); if (!f.offline) { state.feed = f; renderServers(); renderResources(); renderAds(); } }, 5 * 60 * 1000);

@@ -42,13 +42,17 @@ module.exports = function makeAccount(base, file, version) {
     let body;
     if (opts.form) body = opts.form;
     else if (opts.json) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.json); }
-    const req = { method: opts.form || opts.json ? 'POST' : 'GET', headers, body };
+    const method = opts.form || opts.json ? 'POST' : 'GET';
+    // a slow or hanging site never keeps the launcher waiting long: 8 s for reads, 30 s for uploads
+    const limit = method === 'GET' ? 8000 : 30000;
+    const req = () => ({ method, headers, body, signal: AbortSignal.timeout(limit) });
     let r, why = '';
     // Chromium's network stack first: it uses the Windows certificate store and proxy settings, like a browser
-    try { r = await net.fetch(api + route, req); }
+    try { r = await net.fetch(api + route, req()); }
     catch (e) {
       why = e.message;
-      try { r = await fetch(api + route, req); }
+      if (e.name === 'TimeoutError' || e.name === 'AbortError') return { ok: false, error: 'CraftRank is not answering right now.' };
+      try { r = await fetch(api + route, req()); }
       catch (e2) { return { ok: false, error: 'Could not reach CraftRank (' + ((e2.cause && (e2.cause.code || e2.cause.message)) || e2.message || why) + ').' }; }
     }
     let j = {};

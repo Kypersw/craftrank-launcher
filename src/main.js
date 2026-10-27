@@ -221,12 +221,25 @@ ipcMain.handle('feed', async () => {
   if (r.ok) { try { fs.writeFileSync(cache, JSON.stringify(r)); } catch (e) {} return keep(r); }
   try { return keep(Object.assign(JSON.parse(fs.readFileSync(cache, 'utf8')), { offline: true, why: r.error })); } catch (e) { return { servers: [], resources: [], offline: true, why: r.error }; }
 });
-ipcMain.handle('config', () => account.config());
+// the last good config and profile, so the launcher can open at once and refresh behind
+const cacheFile = (n) => path.join(app.getPath('userData'), n + '.json');
+const readCache = (n) => { try { return JSON.parse(fs.readFileSync(cacheFile(n), 'utf8')); } catch (e) { return null; } };
+const writeCache = (n, v) => { try { if (v) fs.writeFileSync(cacheFile(n), JSON.stringify(v)); else fs.rmSync(cacheFile(n), { force: true }); } catch (e) {} };
+ipcMain.handle('config', async () => { const r = await account.config(); if (r.ok) writeCache('config', r); return r; });
+ipcMain.handle('boot:cache', () => {
+  const feed = readCache('feed');
+  if (feed) feedLinks = new Set((feed.ads || []).map((x) => { try { return new URL(x.url).href; } catch (e) { return ''; } }).filter(Boolean));
+  return { feed, config: readCache('config'), me: account.signedIn() ? readCache('me') : null };
+});
 
 /* account and store */
-ipcMain.handle('acct:me', () => account.me());
+ipcMain.handle('acct:me', async () => {
+  const r = await account.me();
+  if (r.ok) writeCache('me', r); else if (r.status === 401 || r.error === 'signed_out') writeCache('me', null);
+  return r;
+});
 ipcMain.handle('acct:login', (e, l, p) => account.login(String(l || ''), String(p || '')));
-ipcMain.handle('acct:logout', () => account.logout());
+ipcMain.handle('acct:logout', async () => { writeCache('me', null); return account.logout(); });
 ipcMain.handle('acct:name', (e, n) => account.setName(String(n || '')));
 ipcMain.handle('acct:skin', safe(async (e, slim) => {
   const r = await dialog.showOpenDialog(win, { title: 'Choose a skin', filters: [{ name: 'Skin (PNG)', extensions: ['png'] }], properties: ['openFile'] });
