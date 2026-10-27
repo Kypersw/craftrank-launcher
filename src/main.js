@@ -61,7 +61,7 @@ let busy = false;
 function readSettings() {
   const ram = Math.floor(os.totalmem() / 1048576);
   const def = { username: '', mc: '', loader: 'vanilla', loaderVersion: '', pack: 'none', playAs: 'offline', performance: false, showSnapshots: false, showOld: false,
-    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false, discord: true, skinsOnServers: true };
+    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false, discord: true, skinsOnServers: true, boost: true };
   try { return Object.assign(def, JSON.parse(fs.readFileSync(SETTINGS, 'utf8'))); } catch (e) { return def; }
 }
 function writeSettings(s) { fs.mkdirSync(path.dirname(SETTINGS), { recursive: true }); fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2)); }
@@ -186,7 +186,7 @@ ipcMain.handle('open', (e, url) => { safeOpen(url); });
 ipcMain.handle('settings:get', () => readSettings());
 // only known settings, each with its own type, are saved
 const SETTING_TYPES = { username: 'string', mc: 'string', loader: 'string', loaderVersion: 'string', pack: 'string', playAs: 'string', playAsChosen: 'boolean',
-  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean', skinsOnServers: 'boolean', theme: 'string' };
+  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean', skinsOnServers: 'boolean', theme: 'string', boost: 'boolean', boostStamp: 'number' };
 ipcMain.handle('settings:set', (e, s) => {
   const cur = readSettings();
   for (const [k, v] of Object.entries(s && typeof s === 'object' ? s : {})) {
@@ -269,6 +269,25 @@ function skinNote(k) {
   if (k.reason === 'download') return 'CraftRank skins on servers are off this time: the skin mod could not be downloaded.';
   return '';
 }
+/* CraftBoost: what kind of PC this is (memory, processor, graphics card) */
+let boostInfo = null;
+async function boostTier() {
+  if (boostInfo) return boostInfo;
+  const ram = Math.round(os.totalmem() / 1073741824), cores = os.cpus().length;
+  let gpu = '', vendor = '';
+  try {
+    const g = await app.getGPUInfo('complete');
+    const dev = (g.gpuDevice || []).find((d) => d.active) || (g.gpuDevice || [])[0] || {};
+    vendor = { 4318: 'nvidia', 4098: 'amd', 32902: 'intel' }[dev.vendorId] || '';
+    gpu = String((g.auxAttributes && g.auxAttributes.glRenderer) || dev.deviceString || '').replace(/^ANGLE \(|\)$/g, '').replace(/,? ?Direct3D.*$/i, '').slice(0, 80);
+  } catch (e) {}
+  const dedicated = vendor === 'nvidia' || vendor === 'amd' && !/Radeon\(TM\) (Graphics|Vega \d)|Radeon Graphics/i.test(gpu);
+  const tier = ram < 8 || !dedicated && cores < 6 ? 'low' : ram >= 16 && dedicated && cores >= 6 ? 'high' : 'mid';
+  boostInfo = { tier, ram, cores, gpu, vendor };
+  return boostInfo;
+}
+ipcMain.handle('boost:info', async () => Object.assign({ on: readSettings().boost !== false }, await boostTier()));
+
 /* play */
 ipcMain.handle('play', async (e, opts) => {
   if (busy) return { ok: false, error: 'Already starting the game.' };
@@ -288,21 +307,26 @@ ipcMain.handle('play', async (e, opts) => {
       if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) return { ok: false, error: 'Pick a username: 3 to 16 letters, numbers or _.' };
       acct = { name, uuid: offlineUuid(name), token: offlineUuid(name), type: 'legacy' };
     }
-    const pack = opts.pack !== undefined ? opts.pack : s.pack;
+    let pack = opts.pack !== undefined ? opts.pack : s.pack;
+    // CraftBoost: performance mods on Fabric, Quilt and NeoForge, FPS settings once per version, Java flags
+    const boost = s.boost !== false ? { tier: (await boostTier()).tier, stamp: +s.boostStamp || 0 } : null;
+    if (boost && (!pack || pack === 'none')) pack = 'perf';
     const mc = opts.mc || s.mc || (await game.versionList()).latest.release;
     // CraftRank skins on servers (see game.syncSkinMod): the skin server from the site, also when playing offline
     let skinRoot = '';
     if (s.skinsOnServers !== false) { const cfg = await account.config(); skinRoot = cfg.ok && cfg.skin_server ? cfg.skin_server : SITE.replace(/\/+$/, '') + '/api/ygg/'; }
-    const prep = await game.prepare(ROOT, { mc, loader: opts.loader || s.loader, loaderVersion: opts.loaderVersion || s.loaderVersion || '', pack, force: !!opts.force, skinRoot }, progress);
+    const prep = await game.prepare(ROOT, { mc, loader: opts.loader || s.loader, loaderVersion: opts.loaderVersion || s.loaderVersion || '', pack, force: !!opts.force, skinRoot, boost }, progress);
     progress('Starting Minecraft', 100);
     // Modded versions (OptiFine, Forge, Fabric…) run out of memory below 2 GB: the game freezes
     // when it reloads resources (for example after leaving the video settings) and ends with code 1.
-    const ram = Math.floor(os.totalmem() / 1048576), loader = opts.loader || s.loader || 'vanilla';
-    const memory = Math.min(Math.max(s.memory, loader === 'vanilla' ? 1024 : 2048), Math.max(1024, Math.floor(ram * 0.6 / 512) * 512));
+    const ram = Math.floor(os.totalmem() / 1048576), picked = opts.loader || s.loader || 'vanilla', loader = prep.loader || picked;
+    // CraftBoost: modded versions get at least 3 GB (4 GB with 16 GB of memory or more), never over 60% of the PC
+    const floor = loader === 'vanilla' ? 1024 : boost ? (ram >= 15000 ? 4096 : ram >= 7500 ? 3072 : 2048) : 2048;
+    const memory = Math.min(Math.max(s.memory, floor), Math.max(1024, Math.floor(ram * 0.6 / 512) * 512));
     const srv = opts.server && typeof opts.server.host === 'string' ? opts.server : null;
-    running = await game.start(ROOT, prep, acct, { memory, server: srv ? { host: srv.host, port: +srv.port || 25565 } : null, skinServer });
+    running = await game.start(ROOT, prep, acct, { memory, server: srv ? { host: srv.host, port: +srv.port || 25565 } : null, skinServer, boost: !!boost });
     presence('play', {
-      since: Date.now(), version: 'Minecraft ' + mc + (loader !== 'vanilla' ? ' · ' + loader[0].toUpperCase() + loader.slice(1) : ''),
+      since: Date.now(), version: 'Minecraft ' + mc + (picked !== 'vanilla' ? ' · ' + picked[0].toUpperCase() + picked.slice(1) : ''),
       server: srv ? { name: String(srv.name || srv.host).slice(0, 60), address: srv.host + (+srv.port && +srv.port !== 25565 ? ':' + +srv.port : ''), icon: srv.icon, url: srv.url } : null,
     });
     send('game', { running: true, note: running.skinsOff ? 'Skins are off this time: the skin helper could not be downloaded. Check your connection and start again.' : (prep.pack && prep.pack.reason ? prep.pack.reason : (opts.server ? skinNote(prep.skins) : '')) });

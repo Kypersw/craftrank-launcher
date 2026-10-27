@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('cr', {
   win: inv('win'), open: inv('open'), settings: inv('settings:get'), save: inv('settings:set'), folder: inv('folder'), info: inv('info'),
   feed: inv('feed'), config: inv('config'),
   me: inv('acct:me'), login: inv('acct:login'), logout: inv('acct:logout'), setName: inv('acct:name'), uploadSkin: inv('acct:skin'), resetSkin: inv('acct:skinReset'),
-  store: inv('store'), equip: inv('store:equip'), premium: inv('premium'), premiumBuy: inv('premium:buy'), wardrobe: inv('wardrobe'),
+  store: inv('store'), equip: inv('store:equip'), premium: inv('premium'), premiumBuy: inv('premium:buy'), wardrobe: inv('wardrobe'), boost: inv('boost:info'),
   update: inv('update:run'), versions: inv('versions'), catalog: inv('catalog'), news: inv('news'), boot: (p, t) => ipcRenderer.send('boot', p, t), loaderVersions: inv('loaderVersions'), play: inv('play'),
   packs: { search: inv('packs:search'), install: inv('packs:install'), remove: inv('packs:remove'), folder: inv('packs:folder') },
   mods: { list: inv('mods:list'), install: inv('mods:install'), remove: inv('mods:remove'), folder: inv('mods:folder') },

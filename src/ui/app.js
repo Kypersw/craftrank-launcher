@@ -313,6 +313,16 @@ $('#prWard').addEventListener('click', async (e) => {
   }
 });
 
+/* CraftBoost */
+async function renderBoost() {
+  const b = cr.boost ? await cr.boost() : null;
+  $('#boostBox').hidden = !(b && b.tier);
+  if (!b || !b.tier) return;
+  const tier = { low: 'Light', mid: 'Balanced', high: 'High' }[b.tier] || 'Balanced';
+  $('#boostBox').classList.toggle('off', !(state.settings.boost !== false));
+  $('#boostInfo').innerHTML = `Your PC: <b>${b.ram} GB memory</b>, ${b.cores} processor threads${b.gpu ? ', ' + esc(b.gpu) : ''}. Preset: <b>${tier}</b>.`;
+}
+
 /* launcher themes (Premium, except the default) */
 const THEMES = [
   { id: 'emerald', name: 'Emerald', br: '#1bd96a', hi: '#4ae68b', ink: '#04140a', free: true },
@@ -472,6 +482,10 @@ function bindSettings(info) {
   const showMem = () => { $('#memVal').textContent = (mem.value / 1024).toFixed(1) + ' GB of ' + (info.ram / 1024).toFixed(0) + ' GB'; };
   showMem(); mem.addEventListener('input', showMem); mem.addEventListener('change', async () => { state.settings = await cr.save({ memory: +mem.value }); });
   $('#msMem').max = Math.max(2048, Math.floor(info.ram * 0.75 / 512) * 512);
+  $('#setBoost').checked = s.boost !== false;
+  $('#setBoost').addEventListener('change', async (e) => { state.settings = await cr.save({ boost: e.target.checked }); renderBoost(); });
+  $('#boostNow').addEventListener('click', async () => { state.settings = await cr.save({ boost: true, boostStamp: Date.now() }); $('#setBoost').checked = true; renderBoost(); toast('Done. Every version gets the best settings for this PC the next time it starts.'); });
+  renderBoost();
   $('#setSkins').checked = s.skinsOnServers !== false; $('#setSkins').addEventListener('change', async (e) => { state.settings = await cr.save({ skinsOnServers: e.target.checked }); });
   $('#setDiscord').checked = s.discord !== false; $('#setDiscord').addEventListener('change', async (e) => { state.settings = await cr.save({ discord: e.target.checked }); });
   $('#setClose').checked = !!s.closeOnPlay; $('#setClose').addEventListener('change', async (e) => { state.settings = await cr.save({ closeOnPlay: e.target.checked }); });

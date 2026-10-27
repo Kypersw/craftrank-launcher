@@ -3,6 +3,7 @@
 // Java runtimes and the CraftRank skin agent (authlib-injector).
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 const { net } = require('electron');
 const { launch, Version, MinecraftFolder } = require('@xmcl/core');
@@ -386,7 +387,22 @@ async function prepare(root, opts, progress) {
   const base = await Version.parse(new MinecraftFolder(root), opts.mc);
   const java = await ensureJava(root, (base.javaVersion && base.javaVersion.component) || 'jre-legacy', progress);
   let id = opts.mc, ofJar = null;
-  const loader = LOADERS.includes(opts.loader) ? opts.loader : 'vanilla';
+  let loader = LOADERS.includes(opts.loader) ? opts.loader : 'vanilla';
+  // The folder (worlds, settings) stays the one of the picked version, even when it runs with a loader below.
+  const dirLoader = loader;
+  // Skins on servers need CustomSkinLoader, a mod. OptiFine and Release have no mod loader,
+  // so with skins on they run with one: OptiFine as a Forge mod, Release on Fabric with only the skin mod.
+  // The game plays the same. If that is not possible for this version, they run as before.
+  if (opts.skinRoot && (loader === 'optifine' || loader === 'vanilla')) {
+    try {
+      if (loader === 'vanilla') {
+        if (await cslAvailable(opts.mc, 'fabric') && (await loaderVersions('fabric', opts.mc))[0]) { loader = 'fabric'; opts.loaderVersion = ''; }
+      } else {
+        const lv = opts.loaderVersion || (await loaderVersions('optifine', opts.mc))[0];
+        if (lv && await cslAvailable(opts.mc, 'forge') && await forgeForOptifine(opts.mc, lv)) { loader = 'forge-optifine'; opts.loaderVersion = lv; }
+      }
+    } catch (e) { loader = dirLoader; }
+  }
   if (loader !== 'vanilla') {
     let lv = opts.loaderVersion;
     if (!lv) lv = (await loaderVersions(loader, opts.mc))[0];
@@ -408,7 +424,7 @@ async function prepare(root, opts, progress) {
     const d = installDependenciesTask(resolved, DL);
     await d.startAndWait({ onUpdate() { if (d.total) progress('Downloading libraries', Math.round(d.progress / d.total * 100)); } });
   }
-  const instDir = instanceDir(root, opts.mc, loader);
+  const instDir = instanceDir(root, opts.mc, dirLoader);
   fs.mkdirSync(instDir, { recursive: true });
   if (loader === 'forge-optifine') {    // OptiFine runs as a Forge mod: keep exactly one OptiFine jar in mods
     const mods = path.join(instDir, 'mods'); fs.mkdirSync(mods, { recursive: true });
@@ -416,10 +432,56 @@ async function prepare(root, opts, progress) {
     const to = path.join(mods, path.basename(ofJar));
     if (!fs.existsSync(to)) fs.copyFileSync(ofJar, to);
   }
+  if (opts.boost) { try { applyBoost(instDir, opts.mc, opts.boost); } catch (e) {} }
   const pack = await syncPack(instDir, opts.mc, loader, opts.pack || 'none', progress);
   await syncMods(root, opts.mc, loader, progress);
   const skins = await syncSkinMod(instDir, opts.mc, loader, opts.skinRoot || '', progress);
-  return { id, java, instDir, pack, skins };
+  return { id, java, instDir, pack, skins, loader };
+}
+
+/* ---------- CraftBoost: automatic FPS settings ---------- */
+// One preset per kind of PC (see main.js boostTier). Written to options.txt once per version folder,
+// and again after "Optimize now" in Settings. The player can change anything in game afterwards.
+const BOOST = {
+  low: { renderDistance: 8, simulationDistance: 6, graphics: 0, particles: 1, entityShadows: false, clouds: 'false', mipmapLevels: 1, biomeBlendRadius: 0, ao: false, entityDistanceScaling: 0.75 },
+  mid: { renderDistance: 12, simulationDistance: 8, graphics: 1, particles: 0, entityShadows: true, clouds: 'fast', mipmapLevels: 2, biomeBlendRadius: 1, ao: true, entityDistanceScaling: 1 },
+  high: { renderDistance: 16, simulationDistance: 10, graphics: 1, particles: 0, entityShadows: true, clouds: 'true', mipmapLevels: 4, biomeBlendRadius: 2, ao: true, entityDistanceScaling: 1 },
+};
+function mcAtLeast(mc, a, b) { const m = /^1\.(\d+)(?:\.(\d+))?/.exec(mc); if (!m) return /^\d{2}\./.test(mc); return +m[1] > a || (+m[1] === a && +(m[2] || 0) >= (b || 0)); }
+function applyBoost(instDir, mc, boost) {
+  const t = BOOST[boost.tier] || BOOST.mid;
+  const markF = path.join(instDir, 'craftrank-boost.json');
+  let mark = {}; try { mark = JSON.parse(fs.readFileSync(markF, 'utf8')); } catch (e) {}
+  if (mark.tier === boost.tier && (mark.at || 0) >= (boost.stamp || 0)) return false;
+  const opt = path.join(instDir, 'options.txt');
+  let lines = []; try { lines = fs.readFileSync(opt, 'utf8').split(/\r?\n/).filter((l) => l !== ''); } catch (e) {}
+  const set = (k, v) => { const i = lines.findIndex((l) => l.startsWith(k + ':')); const line = k + ':' + v; if (i >= 0) lines[i] = line; else lines.push(line); };
+  set('renderDistance', t.renderDistance);
+  if (mcAtLeast(mc, 18)) set('simulationDistance', t.simulationDistance);
+  if (mcAtLeast(mc, 16)) set('graphicsMode', t.graphics); else set('fancyGraphics', t.graphics ? 'true' : 'false');
+  set('particles', t.particles);
+  set('entityShadows', t.entityShadows);
+  set('renderClouds', '"' + t.clouds + '"');
+  set('mipmapLevels', t.mipmapLevels);
+  if (mcAtLeast(mc, 13)) set('biomeBlendRadius', t.biomeBlendRadius);
+  if (mcAtLeast(mc, 19)) set('ao', t.ao); else set('ao', t.ao ? 2 : 0);
+  if (mcAtLeast(mc, 16)) set('entityDistanceScaling', t.entityDistanceScaling);
+  set('enableVsync', 'false');
+  set('maxFps', 260);
+  fs.mkdirSync(instDir, { recursive: true });
+  fs.writeFileSync(opt, lines.join('\n') + '\n');
+  fs.writeFileSync(markF, JSON.stringify({ tier: boost.tier, at: Date.now() }));
+  return true;
+}
+// Java flags for smooth frames: G1 with short pauses (the well known client flags, safe on Java 8 to 21+)
+const BOOST_JVM = ['-XX:+UnlockExperimentalVMOptions', '-XX:+UseG1GC', '-XX:G1NewSizePercent=20', '-XX:G1ReservePercent=20', '-XX:MaxGCPauseMillis=50', '-XX:G1HeapRegionSize=8M', '-XX:+ParallelRefProcEnabled', '-XX:+DisableExplicitGC'];
+
+/** Is there a CustomSkinLoader build for this Minecraft version and mod loader on Modrinth? */
+async function cslAvailable(mc, ml) {
+  try {
+    const list = await getJson('https://api.modrinth.com/v2/project/customskinloader/version?loaders=' + encodeURIComponent(JSON.stringify([ml])) + '&game_versions=' + encodeURIComponent(JSON.stringify([mc])));
+    return Array.isArray(list) && list.length > 0;
+  } catch (e) { return false; }
 }
 
 /**
@@ -622,15 +684,18 @@ async function start(root, prep, account, opts) {
   const agent = opts.skinServer ? await ensureAgent(root) : null;
   const extraJVMArgs = [];
   if (agent) extraJVMArgs.push('-javaagent:' + agent + '=' + opts.skinServer, '-Dauthlibinjector.side=client');
+  if (opts.boost) extraJVMArgs.push(...BOOST_JVM);
   const proc = await launch({
     gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id,
     gameProfile: { name: account.name, id: account.uuid }, accessToken: account.token || account.uuid, userType: account.type || 'mojang',
-    maxMemory: opts.memory, minMemory: Math.min(1024, opts.memory),
+    maxMemory: opts.memory, minMemory: opts.boost ? Math.floor(opts.memory / 2) : Math.min(1024, opts.memory),
     launcherName: 'CraftRank', launcherBrand: 'CraftRank Launcher',
     extraJVMArgs, extraExecOption: { detached: false },
     server: opts.server && opts.server.host ? { ip: opts.server.host, port: opts.server.port || 25565 } : undefined,
   });
   proc.skinsOff = !!opts.skinServer && !agent;
+  // CraftBoost: the game gets a bit more CPU time than background apps
+  if (opts.boost && proc.pid) { try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL); } catch (e) {} }
   return proc;
 }
 

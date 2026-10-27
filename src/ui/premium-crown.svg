@@ -1,0 +1,23 @@
+<svg width="256" height="200" viewBox="0 0 256 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M28 150L16 52L74 102L128 26L182 102L240 52L228 150H28Z" fill="url(#a)" stroke="#734505" stroke-width="6" stroke-linejoin="round"/>
+<path d="M40 136L32 78L74 116L128 46L182 116L224 78L216 136H40Z" fill="white" fill-opacity="0.18"/>
+<rect x="27" y="145" width="202" height="26" rx="5" fill="url(#b)" stroke="#734505" stroke-width="6"/>
+<rect x="34" y="148" width="188" height="6" rx="3" fill="white" fill-opacity="0.35"/>
+<circle cx="16" cy="50" r="10" fill="url(#c)" stroke="#734505" stroke-width="4"/>
+<circle cx="128" cy="22" r="12" fill="url(#d)" stroke="#734505" stroke-width="4"/>
+<circle cx="240" cy="50" r="10" fill="url(#e)" stroke="#734505" stroke-width="4"/>
+<circle cx="78" cy="158" r="8" fill="url(#f)" stroke="#734505" stroke-width="4"/>
+<circle cx="128" cy="158" r="10" fill="url(#g)" stroke="#734505" stroke-width="4"/>
+<circle cx="178" cy="158" r="8" fill="url(#h)" stroke="#734505" stroke-width="4"/>
+<path d="M200 20C201.3 26.7 205.3 30.7 212 32C205.3 33.3 201.3 37.3 200 44C198.7 37.3 194.7 33.3 188 32C194.7 30.7 198.7 26.7 200 20Z" fill="#FFFFE6"/>
+<defs>
+<linearGradient id="a" x1="128" y1="26" x2="128" y2="150" gradientUnits="userSpaceOnUse"><stop stop-color="#FFED9E"/><stop offset="0.45" stop-color="#FAC233"/><stop offset="1" stop-color="#B8700A"/></linearGradient>
+<linearGradient id="b" x1="128" y1="142" x2="128" y2="174" gradientUnits="userSpaceOnUse"><stop stop-color="#FFED9E"/><stop offset="0.45" stop-color="#FAC233"/><stop offset="1" stop-color="#B8700A"/></linearGradient>
+<radialGradient id="c" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(16 50) scale(12)"><stop stop-color="#FFFF99"/><stop offset="1" stop-color="#F2B326"/></radialGradient>
+<radialGradient id="d" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(128 22) scale(14)"><stop stop-color="#FFFF99"/><stop offset="1" stop-color="#F2B326"/></radialGradient>
+<radialGradient id="e" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(240 50) scale(12)"><stop stop-color="#FFFF99"/><stop offset="1" stop-color="#F2B326"/></radialGradient>
+<radialGradient id="f" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(78 158) scale(10)"><stop stop-color="#8CFFB3"/><stop offset="1" stop-color="#1A8C40"/></radialGradient>
+<radialGradient id="g" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(128 158) scale(12)"><stop stop-color="#FF8296"/><stop offset="1" stop-color="#BF0F24"/></radialGradient>
+<radialGradient id="h" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(178 158) scale(10)"><stop stop-color="#8CFFB3"/><stop offset="1" stop-color="#1A8C40"/></radialGradient>
+</defs>
+</svg>
