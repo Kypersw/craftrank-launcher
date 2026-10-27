@@ -25,7 +25,11 @@ public final class Agent {
         put("craftrank.skins.packed", Bridge::packed);
         put("craftrank.skins.unpack", Bridge::unpack);
         put("craftrank.skins.old", Bridge::oldTextures);
+        put(GlPatcher.TEX, Anim::tex);
+        put(GlPatcher.DEL, Anim::del);
+        put(GlPatcher.SWAP, Anim::swap);
         inst.addTransformer(new Patcher(), false);
+        inst.addTransformer(new GlPatcher(), false);
         Log.info("ready, skin server " + root);
     }
 

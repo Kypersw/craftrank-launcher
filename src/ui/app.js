@@ -55,9 +55,31 @@ async function drawHead(img, src, fallbackName) {
 }
 async function drawCape(canvas, src) {
   const c = canvas.getContext('2d'); c.imageSmoothingEnabled = false; c.clearRect(0, 0, canvas.width, canvas.height);
-  const img = await loadImg(src); if (!img) return;
+  const an = canvas.dataset.anim, img = await loadImg(an || src); if (!img) return;
   const k = img.width / 64;
   c.drawImage(img, 1 * k, 1 * k, 10 * k, 16 * k, 0, 0, canvas.width, canvas.height);
+  if (an) animCape(canvas, img, +canvas.dataset.fps || 12, Math.max(1, Math.floor(img.height / (32 * k))), k);
+}
+// animated capes: one loop for all, only canvases on screen, at the cape's own frame rate
+const animCv = new Map();
+let animRaf = 0;
+const animIo = 'IntersectionObserver' in window ? new IntersectionObserver((es) => es.forEach((e) => { const a = animCv.get(e.target); if (a) a.vis = e.isIntersecting; })) : null;
+function animCape(cv, img, fps, n, k) {
+  animCv.set(cv, { img, fps, n, k, last: 0, vis: !animIo });
+  if (animIo) animIo.observe(cv);
+  if (!animRaf) animRaf = requestAnimationFrame(animLoop);
+}
+function animLoop(ts) {
+  animRaf = 0;
+  for (const [cv, a] of animCv) {
+    if (!cv.isConnected) { animCv.delete(cv); if (animIo) animIo.unobserve(cv); continue; }
+    if (!a.vis) continue;
+    const f = Math.floor(ts / 1000 * a.fps) % a.n; if (f === a.last) continue;
+    a.last = f;
+    const c = cv.getContext('2d'); c.imageSmoothingEnabled = false; c.clearRect(0, 0, cv.width, cv.height);
+    c.drawImage(a.img, a.k, f * 32 * a.k + a.k, 10 * a.k, 16 * a.k, 0, 0, cv.width, cv.height);
+  }
+  if (animCv.size) animRaf = requestAnimationFrame(animLoop);
 }
 
 /* ---------- servers ---------- */
@@ -383,7 +405,7 @@ function renderCapes() {
   $('#capeNow').innerHTML = worn ? `Wearing <b>${esc(worn.name)}</b> <button class="btn plain sm" data-cape="0">Take off</button>` : 'No cape on';
   const list = capeUi.items.filter((it) => (capeUi.cat === 'All' || (capeUi.cat === 'Premium' ? it.premium : (it.category || 'Other') === capeUi.cat)) && (!q || it.name.toLowerCase().includes(q)));
   $('#capeList').innerHTML = list.length ? list.map((it) => `<button class="cape${it.id === on ? ' on' : ''}${it.premium ? ' prem' : ''}${it.owned ? '' : ' lock'}" data-cape="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
-    <canvas width="50" height="80" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b><small>${it.id === on ? 'Wearing' : it.owned ? esc(it.category || 'Other') : 'Premium'}</small></button>`).join('')
+    <canvas width="50" height="80" data-tex="${esc(it.texture)}"${it.anim ? ` data-anim="${esc(it.anim.url)}" data-fps="${+it.anim.fps || 12}"` : ''}></canvas><b>${esc(it.name)}</b><small>${it.id === on ? 'Wearing' : it.owned ? esc(it.category || 'Other') : 'Premium'}${it.anim && !/animated/i.test(it.category || '') ? ' · Animated' : ''}</small></button>`).join('')
     : '<p class="hint capes-none">No capes match your search.</p>';
   $('#capeList').querySelectorAll('canvas[data-tex]').forEach((cv) => capeIo ? capeIo.observe(cv) : drawCape(cv, cv.dataset.tex));
   $('#capeHint').hidden = !!pr;

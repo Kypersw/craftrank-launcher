@@ -29,6 +29,8 @@ final class Textures {
 
     static void init(String r) { root = r; }
 
+    static ExecutorService pool() { return pool; }
+
     /** Cached answer, or null when it is not known yet. */
     static Entry cached(String name) {
         Entry e = cache.get(name.toLowerCase());
@@ -70,6 +72,12 @@ final class Textures {
         String skin = url(tex, "SKIN"), cape = url(tex, "CAPE");
         boolean slim = Pattern.compile("\"SKIN\"\\s*:\\s*\\{[^}]*\"model\"\\s*:\\s*\"slim\"").matcher(tex).find();
         Entry e = new Entry(skin, slim, cape);
+        // animated cape: CAPE metadata {"animated": strip URL, "fps": "12"}
+        Matcher a = Pattern.compile("\"animated\"\\s*:\\s*\"([^\"]+)\"").matcher(tex);
+        if (cape != null && a.find()) {
+            Matcher f = Pattern.compile("\"fps\"\\s*:\\s*\"?(\\d+)").matcher(tex);
+            Anim.want(a.group(1).replace("\\/", "/"), f.find() ? Integer.parseInt(f.group(1)) : 12);
+        }
         Log.info(name + ": " + (e.empty() ? "no CraftRank skin" : (skin != null ? "skin" : "") + (cape != null ? (skin != null ? " + " : "") + "cape" : "")));
         return e;
     }
