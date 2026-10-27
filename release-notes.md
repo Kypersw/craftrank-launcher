@@ -1,1 +1,1 @@
-Capes: hundreds of new free capes (flags, colours, patterns, emblems, materials and more). The Account page now sorts them into categories with a search box; click a cape to wear it, it shows in game next time you start it.
+CraftRank Premium: HD premium capes, a wardrobe to save and switch your looks, a gold name with a crown on CraftRank and launcher themes. Get it on the Account page or at craftrank.org/premium (one payment, no automatic renewal). The launcher and the free capes stay free.

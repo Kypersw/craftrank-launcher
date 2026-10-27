@@ -75,5 +75,11 @@ module.exports = function makeAccount(base, file, version) {
     resetSkin() { const fd = new FormData(); fd.append('reset', '1'); return call('skin', { form: fd }); },
     store: () => call('store'),
     equip: (kind, item) => call('equip', { json: { kind, item } }),
+    premium: () => call('premium'),
+    premiumBuy: (plan) => call('premium_buy', { json: { plan } }),
+    outfits: () => call('outfits'),
+    outfitSave: (name) => call('outfit_save', { json: { name } }),
+    outfitWear: (id) => call('outfit_wear', { json: { id } }),
+    outfitDelete: (id) => call('outfit_delete', { json: { id } }),
   };
 };

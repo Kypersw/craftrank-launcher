@@ -19,7 +19,7 @@
       <button id="ghTile" title="Source code on GitHub" aria-label="GitHub"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg></button>
       <button id="reload" title="Refresh lists" aria-label="Refresh lists"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg></button>
       <button id="openFolder2" title="Game folder" aria-label="Game folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg></button>
-      <button class="acct" data-page="account" title="Skin and account"><img id="head" alt="" width="22" height="22"><span id="acctTile">Sign in</span></button>
+      <button class="acct" data-page="account" title="Skin and account"><img id="head" alt="" width="22" height="22"><span id="acctTile">Sign in</span><i class="crown" id="acctCrown" hidden title="CraftRank Premium"></i></button>
       <button data-page="settings" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <button data-win="min" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
       <button data-win="close" class="x" title="Close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
@@ -140,8 +140,17 @@
             <p class="hint">Turn on “CraftRank account” under your name at the bottom to play with this name and skin.</p>
             <div class="row-btns"><button class="btn plain" id="prLogout">Sign out</button></div>
           </div>
+          <div class="box pr-prem" id="prPrem" hidden>
+            <div class="pp-l"><i class="crown big"></i><div><h3 id="ppTitle">CraftRank Premium</h3><p class="hint" id="ppText"></p></div></div>
+            <div class="pp-r" id="ppBuy"></div>
+          </div>
+          <div class="box pr-ward" id="prWard" hidden>
+            <div class="pc-h"><h3>Wardrobe</h3><p class="hint">Save your skin and cape as an outfit and switch with one click.</p></div>
+            <form class="inl ward-new" id="wardNew"><input id="wardName" maxlength="40" placeholder="Outfit name, for example PvP" spellcheck="false"><button class="btn blue">Save current look</button></form>
+            <div class="ward" id="wardList"></div>
+          </div>
           <div class="box pr-capes" id="prCapes" hidden>
-            <div class="pc-h"><h3>Capes</h3><p class="hint">Free capes from CraftRank. Click one to wear it: it shows in game, and other players with this launcher see it too.</p></div>
+            <div class="pc-h"><h3>Capes</h3><p class="hint">Click a cape to wear it: it shows in game, and other players with this launcher see it too. Gold ones are for Premium members.</p></div>
             <div class="cape-bar"><span class="cape-now" id="capeNow"></span><label class="search cape-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="capeQ" placeholder="Search capes" spellcheck="false" aria-label="Search capes"></label></div>
             <div class="cape-cats" id="capeCats" role="group" aria-label="Cape categories"></div>
             <p class="hint" id="capeHint" hidden>Save an in-game name above to wear a cape.</p>
@@ -163,6 +172,7 @@
           <label class="chk"><input type="checkbox" id="setClose"><span>Close the launcher when the game starts</span></label>
           <label class="chk"><input type="checkbox" id="setSkins"><span>Show CraftRank skins on servers (adds the CustomSkinLoader mod to Fabric, Quilt, Forge and NeoForge versions)</span></label>
           <label class="chk"><input type="checkbox" id="setDiscord"><span>Show what I'm playing in Discord (server name, with a button to its page)</span></label>
+          <div class="fld"><span>Launcher theme <em id="themeNote"></em></span><div class="themes" id="themes" role="radiogroup" aria-label="Launcher theme"></div></div>
           <div class="row-btns"><button class="btn plain" id="openFolder">Open game folder</button></div>
           <p class="hint" id="about"></p>
         </div>

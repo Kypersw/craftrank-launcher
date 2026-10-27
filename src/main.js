@@ -186,7 +186,7 @@ ipcMain.handle('open', (e, url) => { safeOpen(url); });
 ipcMain.handle('settings:get', () => readSettings());
 // only known settings, each with its own type, are saved
 const SETTING_TYPES = { username: 'string', mc: 'string', loader: 'string', loaderVersion: 'string', pack: 'string', playAs: 'string', playAsChosen: 'boolean',
-  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean', skinsOnServers: 'boolean' };
+  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean', skinsOnServers: 'boolean', theme: 'string' };
 ipcMain.handle('settings:set', (e, s) => {
   const cur = readSettings();
   for (const [k, v] of Object.entries(s && typeof s === 'object' ? s : {})) {
@@ -236,6 +236,23 @@ ipcMain.handle('acct:skin', safe(async (e, slim) => {
 ipcMain.handle('acct:skinReset', () => account.resetSkin());
 ipcMain.handle('store', () => account.store());
 ipcMain.handle('store:equip', (e, kind, id) => account.equip(kind === 'skin' ? 'skin' : 'cape', id ? +id : 0));
+/* CraftRank Premium: the payment page (Creem) opens in the browser */
+ipcMain.handle('premium', () => account.premium());
+ipcMain.handle('premium:buy', safe(async (e, plan) => {
+  const r = await account.premiumBuy(plan === 'year' ? 'year' : 'month');
+  if (!r.ok) return r;
+  let u; try { u = new URL(String(r.url)); } catch (x) { return { ok: false, error: 'The payment page could not be opened.' }; }
+  const h = u.hostname.toLowerCase();
+  if (u.protocol !== 'https:' || !(h === 'creem.io' || h.endsWith('.creem.io'))) return { ok: false, error: 'The payment page could not be opened.' };
+  shell.openExternal(u.href);
+  return { ok: true };
+}));
+ipcMain.handle('wardrobe', (e, act, arg) => {
+  if (act === 'save') return account.outfitSave(String(arg || '').slice(0, 40));
+  if (act === 'wear') return account.outfitWear(+arg || 0);
+  if (act === 'delete') return account.outfitDelete(+arg || 0);
+  return account.outfits();
+});
 
 /* versions and loaders */
 ipcMain.handle('versions', safe(async () => {

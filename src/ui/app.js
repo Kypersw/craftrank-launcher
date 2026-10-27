@@ -210,6 +210,8 @@ async function loadMe() {
   const name = asCr ? pr.name : ($('#barName').value.trim() || 'Steve');
   $('#barSigned').textContent = name;
   drawHead($('#head'), asCr ? pr.skin : null, name);
+  $('#acctCrown').hidden = !isPremium();
+  applyTheme(state.settings.theme);
   renderAds();
 }
 $('#useCr').addEventListener('change', async (e) => { state.settings = await cr.save({ playAs: e.target.checked ? 'craftrank' : 'offline', playAsChosen: true }); loadMe(); });
@@ -234,8 +236,116 @@ async function renderAccount() {
   const skinItem = null;
   $('#skinSlim').checked = !!(pr && pr.slim);
   await drawSkin($('#skinCanvas'), skinItem ? skinItem.texture : pr && pr.skin, skinItem ? skinItem.slim : pr && pr.slim);
-  loadCapes();
+  renderPremium();
+  await loadCapes();
+  loadWardrobe();
 }
+
+/* ---------- CraftRank Premium (bought here or on the site, same account) ---------- */
+const isPremium = () => !!(state.me && state.me.premium && state.me.premium.active);
+let premWatch = null;
+function renderPremium() {
+  const p = state.me && state.me.premium;
+  $('#prPrem').hidden = !p;
+  if (!p) return;
+  $('#prPrem').classList.toggle('on', !!p.active);
+  if (p.active) {
+    $('#ppTitle').textContent = 'You are Premium';
+    $('#ppText').textContent = 'Until ' + p.until + '. HD premium capes, the wardrobe, a gold name on CraftRank and launcher themes are yours. Buying again adds the time on top.';
+  } else {
+    $('#ppTitle').textContent = 'CraftRank Premium';
+    $('#ppText').textContent = 'HD premium capes, a wardrobe for your looks, a gold name with a crown on CraftRank and launcher themes. One payment, no automatic renewal.';
+  }
+  $('#ppBuy').innerHTML = (p.plans || []).map((pl) => `<button class="btn ${pl.id === 'year' ? 'gold' : 'plain'}" data-plan="${esc(pl.id)}"><b>${esc(pl.price_label)}</b> ${esc(pl.label)}</button>`).join('');
+}
+$('#ppBuy').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-plan]'); if (!b) return;
+  b.disabled = true;
+  const r = await cr.premiumBuy(b.dataset.plan);
+  b.disabled = false;
+  if (!r.ok) return toast(r.error || 'Could not open the payment page.');
+  toast('The payment page is open in your browser. Premium turns on here by itself after you pay.');
+  // check every 10 seconds for 10 minutes
+  clearInterval(premWatch); let n = 0;
+  premWatch = setInterval(async () => {
+    if (++n > 60) return clearInterval(premWatch);
+    const m = await cr.me();
+    if (m.ok && m.premium && m.premium.active && !isPremium()) { clearInterval(premWatch); await loadMe(); renderAccount(); toast('Premium is on. Enjoy!'); }
+  }, 10000);
+});
+function goPremium() { const el = $('#prPrem'); if (el && !el.hidden) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
+/* wardrobe (Premium) */
+async function loadWardrobe() {
+  const box = $('#prWard');
+  box.hidden = !(state.me && state.me.premium);   // older sites have no Premium
+  if (box.hidden) return;
+  box.classList.toggle('locked', !isPremium());
+  if (!isPremium()) { $('#wardList').innerHTML = '<p class="hint">The wardrobe is part of Premium. <a href="#" data-go-premium>Get Premium</a></p>'; $('#wardNew').hidden = true; return; }
+  $('#wardNew').hidden = false;
+  const r = await cr.wardrobe('list');
+  renderWardrobe(r.ok ? r.outfits : []);
+}
+function renderWardrobe(list) {
+  const capes = new Map(capeUi.items.map((c) => [c.id, c]));
+  $('#wardList').innerHTML = list.length ? list.map((o) => `<div class="outfit"><canvas class="o-skin" width="48" height="96" data-skin="${esc(o.skin || '')}" data-slim="${o.slim ? 1 : 0}"></canvas>${o.cape_item && capes.get(o.cape_item) ? `<canvas class="o-cape" width="30" height="48" data-tex="${esc(capes.get(o.cape_item).texture)}"></canvas>` : ''}
+    <b>${esc(o.name)}</b><div class="o-btns"><button class="btn plain sm" data-wear="${o.id}">Wear</button><button class="btn plain sm" data-del="${o.id}" title="Delete">×</button></div></div>`).join('')
+    : '<p class="hint">No outfits yet. Put on a skin and a cape, then save the look.</p>';
+  $('#wardList').querySelectorAll('canvas.o-skin').forEach((c) => drawSkin(c, c.dataset.skin || null, c.dataset.slim === '1'));
+  $('#wardList').querySelectorAll('canvas.o-cape').forEach((c) => drawCape(c, c.dataset.tex));
+}
+$('#wardNew').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const r = await cr.wardrobe('save', $('#wardName').value.trim());
+  if (!r.ok) return toast(r.error);
+  $('#wardName').value = ''; renderWardrobe(r.outfits); toast('Outfit saved.');
+});
+$('#prWard').addEventListener('click', async (e) => {
+  const g = e.target.closest('[data-go-premium]'); if (g) { e.preventDefault(); return goPremium(); }
+  const w = e.target.closest('[data-wear]'), d = e.target.closest('[data-del]');
+  if (w) {
+    const r = await cr.wardrobe('wear', w.dataset.wear);
+    if (!r.ok) return toast(r.error);
+    state.me.profile = r.profile; renderAccount(); loadMe(); toast('Outfit on. It shows next time you start the game.');
+  } else if (d) {
+    const r = await cr.wardrobe('delete', d.dataset.del);
+    if (r.ok) renderWardrobe(r.outfits);
+  }
+});
+
+/* launcher themes (Premium, except the default) */
+const THEMES = [
+  { id: 'emerald', name: 'Emerald', br: '#1bd96a', hi: '#4ae68b', ink: '#04140a', free: true },
+  { id: 'gold', name: 'Gold', br: '#f2b821', hi: '#ffd25e', ink: '#1a1200' },
+  { id: 'crimson', name: 'Crimson', br: '#ff4d5e', hi: '#ff7b88', ink: '#1a0306' },
+  { id: 'ocean', name: 'Ocean', br: '#2fb4ff', hi: '#6ccbff', ink: '#03121c' },
+  { id: 'amethyst', name: 'Amethyst', br: '#b06cff', hi: '#c895ff', ink: '#12051f' },
+  { id: 'sunset', name: 'Sunset', br: '#ff8a3d', hi: '#ffa96b', ink: '#1a0b02' },
+  { id: 'frost', name: 'Frost', br: '#8fe3ff', hi: '#b8eeff', ink: '#06161c' },
+  { id: 'rose', name: 'Rose', br: '#ff6fb1', hi: '#ff99c8', ink: '#1c0612' },
+];
+function applyTheme(id) {
+  const t = THEMES.find((x) => x.id === id && (x.free || isPremium())) || THEMES[0];
+  const r = document.documentElement.style;
+  r.setProperty('--br', t.br); r.setProperty('--br-hi', t.hi); r.setProperty('--ink', t.ink);
+  document.documentElement.dataset.theme = t.id;
+  renderThemes(t.id);
+}
+function renderThemes(cur) {
+  const el = $('#themes'); if (!el) return;
+  el.innerHTML = THEMES.map((t) => {
+    const locked = !t.free && !isPremium();
+    return `<button type="button" role="radio" aria-checked="${t.id === cur}" class="th${t.id === cur ? ' on' : ''}${locked ? ' lock' : ''}" data-theme="${t.id}" title="${esc(t.name)}${locked ? ' (Premium)' : ''}"><i style="background:${t.br}"></i><span>${esc(t.name)}</span></button>`;
+  }).join('');
+  $('#themeNote').textContent = isPremium() ? '' : 'More themes with Premium';
+}
+$('#themes').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-theme]'); if (!b) return;
+  const t = THEMES.find((x) => x.id === b.dataset.theme);
+  if (!t.free && !isPremium()) { toast('This theme is part of CraftRank Premium. Get it on the Account page.'); return; }
+  state.settings = await cr.save({ theme: t.id });
+  applyTheme(t.id);
+});
 
 /* ---------- capes (added in Admin → Launcher on the site) ---------- */
 // hundreds of capes: grouped by category, searchable, each picture drawn only when it scrolls into view
@@ -245,23 +355,25 @@ const capeIo = 'IntersectionObserver' in window ? new IntersectionObserver((es) 
 }), { rootMargin: '300px' }) : null;
 async function loadCapes() {
   const r = await cr.store();
-  capeUi.items = r && r.ok ? (r.items || []).filter((it) => it.kind === 'cape' && it.owned) : [];
+  capeUi.items = r && r.ok ? (r.items || []).filter((it) => it.kind === 'cape' && (it.owned || it.premium)) : [];
   $('#prCapes').hidden = !capeUi.items.length;
   if (!capeUi.items.length) return;
   const cats = {};
-  capeUi.items.forEach((it) => { const c = it.category || 'Other'; cats[c] = (cats[c] || 0) + 1; });
-  if (capeUi.cat !== 'All' && !cats[capeUi.cat]) capeUi.cat = 'All';
-  $('#capeCats').innerHTML = [['All', capeUi.items.length], ...Object.keys(cats).sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b)).map((c) => [c, cats[c]])]
-    .map(([c, n]) => `<button class="${c === capeUi.cat ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)} <em>${n}</em></button>`).join('');
+  capeUi.items.forEach((it) => { if (it.premium) return; const c = it.category || 'Other'; cats[c] = (cats[c] || 0) + 1; });
+  if (capeUi.cat !== 'All' && capeUi.cat !== 'Premium' && !cats[capeUi.cat]) capeUi.cat = 'All';
+  const nPrem = capeUi.items.filter((it) => it.premium).length;
+  if (capeUi.cat === 'Premium' && !nPrem) capeUi.cat = 'All';
+  $('#capeCats').innerHTML = [['All', capeUi.items.length], ...(nPrem ? [['Premium', nPrem]] : []), ...Object.keys(cats).sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b)).map((c) => [c, cats[c]])]
+    .map(([c, n]) => `<button class="${c === capeUi.cat ? 'on' : ''}${c === 'Premium' ? ' prem' : ''}" data-cat="${esc(c)}">${esc(c)} <em>${n}</em></button>`).join('');
   renderCapes();
 }
 function renderCapes() {
   const pr = state.me && state.me.profile, on = pr ? pr.cape_item : null, q = capeUi.q.trim().toLowerCase();
   const worn = capeUi.items.find((it) => it.id === on);
   $('#capeNow').innerHTML = worn ? `Wearing <b>${esc(worn.name)}</b> <button class="btn plain sm" data-cape="0">Take off</button>` : 'No cape on';
-  const list = capeUi.items.filter((it) => (capeUi.cat === 'All' || (it.category || 'Other') === capeUi.cat) && (!q || it.name.toLowerCase().includes(q)));
-  $('#capeList').innerHTML = list.length ? list.map((it) => `<button class="cape${it.id === on ? ' on' : ''}" data-cape="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
-    <canvas width="50" height="80" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b><small>${it.id === on ? 'Wearing' : esc(it.category || 'Other')}</small></button>`).join('')
+  const list = capeUi.items.filter((it) => (capeUi.cat === 'All' || (capeUi.cat === 'Premium' ? it.premium : (it.category || 'Other') === capeUi.cat)) && (!q || it.name.toLowerCase().includes(q)));
+  $('#capeList').innerHTML = list.length ? list.map((it) => `<button class="cape${it.id === on ? ' on' : ''}${it.premium ? ' prem' : ''}${it.owned ? '' : ' lock'}" data-cape="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
+    <canvas width="50" height="80" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b><small>${it.id === on ? 'Wearing' : it.owned ? esc(it.category || 'Other') : 'Premium'}</small></button>`).join('')
     : '<p class="hint capes-none">No capes match your search.</p>';
   $('#capeList').querySelectorAll('canvas[data-tex]').forEach((cv) => capeIo ? capeIo.observe(cv) : drawCape(cv, cv.dataset.tex));
   $('#capeHint').hidden = !!pr;
@@ -278,6 +390,8 @@ $('#prCapes').addEventListener('click', async (e) => {
   const id = +b.dataset.cape, pr = state.me && state.me.profile;
   if (!pr) return toast('Pick your in-game name first.');
   if (id && pr.cape_item === id) return;
+  const it = capeUi.items.find((x) => x.id === id);
+  if (it && !it.owned) { toast('This cape is part of CraftRank Premium.'); return goPremium(); }
   b.disabled = true;
   const r = await cr.equip('cape', id);
   if (!r.ok) { b.disabled = false; return toast(r.error || 'Could not change the cape.'); }
