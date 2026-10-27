@@ -390,17 +390,12 @@ async function prepare(root, opts, progress) {
   let loader = LOADERS.includes(opts.loader) ? opts.loader : 'vanilla';
   // The folder (worlds, settings) stays the one of the picked version, even when it runs with a loader below.
   const dirLoader = loader;
-  // Skins on servers need CustomSkinLoader, a mod. OptiFine and Release have no mod loader,
-  // so with skins on they run with one: OptiFine as a Forge mod, Release on Fabric with only the skin mod.
-  // The game plays the same. If that is not possible for this version, they run as before.
-  if (opts.skinRoot && (loader === 'optifine' || loader === 'vanilla')) {
+  // Skins on servers need CustomSkinLoader, a mod. Release has no mod loader, so with skins on it runs
+  // on Fabric with only the skin mod (and CraftBoost's performance mods). The game plays the same.
+  // OptiFine is not changed: OptiFine as a Forge mod crashed on new versions (1.21.x).
+  if (opts.skinRoot && loader === 'vanilla') {
     try {
-      if (loader === 'vanilla') {
-        if (await cslAvailable(opts.mc, 'fabric') && (await loaderVersions('fabric', opts.mc))[0]) { loader = 'fabric'; opts.loaderVersion = ''; }
-      } else {
-        const lv = opts.loaderVersion || (await loaderVersions('optifine', opts.mc))[0];
-        if (lv && await cslAvailable(opts.mc, 'forge') && await forgeForOptifine(opts.mc, lv)) { loader = 'forge-optifine'; opts.loaderVersion = lv; }
-      }
+      if (await cslAvailable(opts.mc, 'fabric') && (await loaderVersions('fabric', opts.mc))[0]) { loader = 'fabric'; opts.loaderVersion = ''; }
     } catch (e) { loader = dirLoader; }
   }
   if (loader !== 'vanilla') {
