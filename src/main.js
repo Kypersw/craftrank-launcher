@@ -430,6 +430,23 @@ ipcMain.handle('mods:install', safe(async (e, id) => {
   return Object.assign({ ok: true, installed: game.modState(ROOT, v.mc, v.loader).st }, r);
 }));
 ipcMain.handle('mods:remove', safe(async (e, id) => { const v = await curVer(); game.removeMod(ROOT, v.mc, v.loader, String(id)); return { ok: true, installed: game.modState(ROOT, v.mc, v.loader).st }; }));
+/* ready mod packs (PvP Pack…). A pack on a version without a mod loader switches that version to Fabric first. */
+ipcMain.handle('modpacks:list', async () => { const v = await curVer(); return { ok: true, mc: v.mc, loader: v.loader, packs: game.modPackState(ROOT, v.mc, v.loader) }; });
+ipcMain.handle('modpacks:install', safe(async (e, id) => {
+  if (busy) return { ok: false, error: 'Wait until the game has started, then try again.' };
+  let v = await curVer(), switched = false;
+  const pk = game.MOD_PACKS.find((p) => p.id === String(id));
+  if (!pk) return { ok: false, error: 'Unknown pack.' };
+  if (!game.modLoaders(v.loader)) {
+    const fab = await game.loaderVersions('fabric', v.mc).catch(() => []);
+    if (!fab || !fab.length) return { ok: false, error: 'Fabric is not out for Minecraft ' + v.mc + '. Pick a newer version in the version menu.' };
+    writeSettings(Object.assign(readSettings(), { loader: 'fabric', loaderVersion: '' }));
+    v = { mc: v.mc, loader: 'fabric' }; switched = true;
+  }
+  const r = await game.installModPack(ROOT, v.mc, v.loader, pk.id, (name, i, n) => send('mods:step', { id: 'pack:' + pk.id, file: (i + 1) + '/' + n + ' ' + name }));
+  return Object.assign({ ok: true, switched, mc: v.mc, loader: v.loader, packs: game.modPackState(ROOT, v.mc, v.loader) }, r);
+}));
+ipcMain.handle('modpacks:remove', safe(async (e, id) => { const v = await curVer(); game.removeModPack(ROOT, v.mc, v.loader, String(id)); return { ok: true, packs: game.modPackState(ROOT, v.mc, v.loader) }; }));
 ipcMain.handle('mods:folder', async () => { const v = await curVer(); const d = game.modState(ROOT, v.mc, v.loader).dir; fs.mkdirSync(d, { recursive: true }); shell.openPath(d); });
 
 /* my servers */

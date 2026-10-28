@@ -704,6 +704,46 @@ function removeMod(root, mc, loader, id) {
   drop(id);
   fs.writeFileSync(file, JSON.stringify(st));
 }
+/**
+ * Ready mod packs on the Mods page: one click installs every mod in the pack that is out for the
+ * version (with the mods they need). All client-side mods from Modrinth that servers allow; no cheats.
+ */
+const MOD_PACKS = [{
+  id: 'pvp', title: 'PvP Pack', loader: 'fabric',
+  about: 'Everything for PvP in one click: keystrokes and CPS, armor and effect timers, zoom, ping, hit color, low fire, totem counter and 1.8-style animations.',
+  mods: [
+    ['w7ThoJFB', 'Zoomify', 'Zoom'], ['5xqElbjw', 'Clean Keystrokes', 'Keystrokes and CPS'], ['1yIQcc2b', 'EvergreenHUD', 'FPS, CPS and more on screen'],
+    ['wF189hn9', "uku's Armor HUD", 'Armor durability'], ['x02cBj9Y', 'Status Effect Bars', 'Effect timers'], ['MS1ZMyR7', 'Better Ping Display', 'Ping in the player list'],
+    ['ZcR9weSm', 'Dynamic Crosshair', 'Crosshair that shows what you can hit'], ['o4y0N2hu', 'BetterHurtCam', 'Less screen shake when hit'],
+    ['9ZPMzrQQ', 'Low Fire Reborn', 'Lower fire on screen'], ['6zatK8W5', 'DamageTint', 'Hit color'], ['GfoMZ9Ly', 'Shield Statuses', 'Shield state by color'],
+    ['T9R7YTnA', 'TotemCounter', 'Totem pops'], ['4Hfmgaef', 'OverflowAnimations', '1.7 / 1.8 animations'], ['mOgUt4GM', 'Mod Menu', 'Settings for every mod'],
+  ],
+}];
+/** Installs a pack: every mod that is out for this version; the rest are listed as skipped. */
+async function installModPack(root, mc, loader, packId, progress) {
+  const pk = MOD_PACKS.find((p) => p.id === packId);
+  if (!pk) throw new Error('Unknown pack.');
+  const done = [], skipped = [];
+  for (const [id, name] of pk.mods) {
+    if (progress) progress(name, done.length + skipped.length, pk.mods.length);
+    try { await installMod(root, mc, loader, id); done.push(name); } catch (e) { skipped.push(name); }
+  }
+  if (!done.length) throw new Error('None of the ' + pk.title + ' mods are out for Minecraft ' + mc + ' with ' + loaderName(loader) + ' yet.');
+  return { done, skipped };
+}
+/** Removes the pack's mods from this version (mods another mod needs stay). */
+function removeModPack(root, mc, loader, packId) {
+  const pk = MOD_PACKS.find((p) => p.id === packId);
+  if (!pk) return;
+  // remove in reverse so mods that need others go first
+  for (const [id] of pk.mods.slice().reverse()) { try { removeMod(root, mc, loader, id); } catch (e) {} }
+}
+/** How many of each pack's mods are installed in this version. */
+function modPackState(root, mc, loader) {
+  const { st } = modState(root, mc, loader);
+  return MOD_PACKS.map((p) => ({ id: p.id, title: p.title, about: p.about, loader: p.loader, mods: p.mods.map(([id, name, what]) => ({ id, name, what, on: !!(st[id] && !st[id].dep) })) }));
+}
+
 /** Before the game starts: puts back mods whose file went missing (removed by hand, or by a mod pack). */
 async function syncMods(root, mc, loader, progress) {
   if (!modLoaders(loader)) return;
@@ -770,4 +810,4 @@ async function start(root, prep, account, opts) {
   return proc;
 }
 
-module.exports = { instanceDir, modLoaders, modState, installMod, removeMod, searchPacks, packState, installPack, removePack, PACKS, versionList, loaderVersions, catalog, optifineList, prepare, start, ensureJava, consoleJava, download, getJson, LOADERS };
+module.exports = { instanceDir, modLoaders, modState, installMod, removeMod, installModPack, removeModPack, modPackState, MOD_PACKS, searchPacks, packState, installPack, removePack, PACKS, versionList, loaderVersions, catalog, optifineList, prepare, start, ensureJava, consoleJava, download, getJson, LOADERS };

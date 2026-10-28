@@ -585,6 +585,7 @@ async function loadMods(reset, more) {
   const r = await cr.mods.list(q, md.off);
   md.busy = false;
   if (!r.ok) { $('#mdList').innerHTML = `<div class="empty" style="grid-column:1/-1">${esc(r.error || 'Could not load mods.')}</div>`; return; }
+  loadModPacks();
   md.key = key; md.total = r.total; md.installed = r.installed || {}; md.can = r.canMod; md.items = md.items.concat(r.items); md.off = md.items.length;
   $('#mdNote').textContent = 'For ' + $('#verLabel').textContent + '. Mods go into this version only, with the mods they need.';
   const w = $('#mdWarn');
@@ -617,6 +618,37 @@ $('#mdList').addEventListener('click', async (e) => {
   renderMods();
   if (!r.ok) return toast(r.error);
   toast(has ? 'Mod removed.' : r.deps && r.deps.length ? 'Installed with ' + r.deps.join(', ') + '. Start the game to use it.' : 'Installed. Start the game to use it.');
+});
+
+/* ---------- ready mod packs (PvP Pack) ---------- */
+const mpk = { packs: [], work: '' };
+async function loadModPacks() { const r = await cr.mods.packs(); if (r && r.ok) { mpk.packs = r.packs; renderModPacks(); } }
+function renderModPacks() {
+  $('#mdPacks').innerHTML = mpk.packs.map((p) => {
+    const n = p.mods.filter((m) => m.on).length, all = n === p.mods.length;
+    return `<div class="mpk"><img class="mpk-logo" src="${p.id}-pack.png" alt="">
+      <div class="mpk-body"><div class="mpk-h"><b>${esc(p.title)}</b><span>${p.mods.length} mods · Fabric</span>${n ? `<span class="on">${n} installed</span>` : ''}</div>
+        <p>${esc(p.about)}</p>
+        <div class="mpk-mods">${p.mods.map((m) => `<span class="${m.on ? 'on' : ''}" title="${esc(m.what)}">${esc(m.name)}</span>`).join('')}</div></div>
+      <div class="mpk-act"><button class="btn ${n ? 'plain' : 'blue'}" data-mpk="${p.id}" data-has="${n ? 1 : ''}"${mpk.work ? ' disabled' : ''}>${mpk.work === p.id ? 'Installing…' : all ? 'Remove pack' : n ? 'Install the rest' : 'Install pack'}</button>
+        ${n && !all ? `<a href="#" class="more" data-mpkrm="${p.id}">Remove pack</a>` : ''}</div></div>`;
+  }).join('');
+}
+cr.on('mods:step', (d) => { if (d && String(d.id).startsWith('pack:')) { const b = $(`[data-mpk="${CSS.escape(d.id.slice(5))}"]`); if (b && d.file) b.textContent = d.file.length > 26 ? d.file.slice(0, 24) + '…' : d.file; } });
+$('#mdPacks').addEventListener('click', async (e) => {
+  const rm = e.target.closest('[data-mpkrm]'), b = e.target.closest('[data-mpk]');
+  if (rm) { e.preventDefault(); const r = await cr.mods.packRemove(rm.dataset.mpkrm); if (r.ok) { mpk.packs = r.packs; renderModPacks(); loadMods(true); toast('Pack removed.'); } else toast(r.error); return; }
+  if (!b || b.disabled) return;
+  const p = mpk.packs.find((x) => x.id === b.dataset.mpk), all = p && p.mods.every((m) => m.on);
+  if (all) { const r = await cr.mods.packRemove(p.id); if (r.ok) { mpk.packs = r.packs; renderModPacks(); loadMods(true); toast('Pack removed.'); } else toast(r.error); return; }
+  mpk.work = p.id; renderModPacks();
+  const r = await cr.mods.packInstall(p.id);
+  mpk.work = '';
+  if (!r.ok) { renderModPacks(); return toast(r.error); }
+  mpk.packs = r.packs; renderModPacks();
+  if (r.switched) { state.settings = await cr.settings(); verLabel(); }
+  loadMods(true);
+  toast((r.switched ? 'Switched Minecraft ' + r.mc + ' to Fabric. ' : '') + r.done.length + ' mods installed.' + (r.skipped.length ? ' Not out for this version yet: ' + r.skipped.join(', ') + '.' : '') + ' Start the game to use them.');
 });
 
 /* ---------- update reminder ---------- */

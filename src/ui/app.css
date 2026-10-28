@@ -390,3 +390,18 @@ input[type=range] { accent-color: var(--br); }
 .sw input:checked + i { background: var(--br); }
 .sw input:checked + i::after { transform: translateX(20px); }
 .sw input:focus-visible + i { outline: 2px solid var(--hi); outline-offset: 2px; }
+
+/* ready mod packs on the Mods page */
+.mpk { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 18px; align-items: center; margin: 4px 0 18px; padding: 16px 18px; border-radius: 3px; background: linear-gradient(90deg, rgba(27,217,106,.08), rgba(255,255,255,.02) 60%); box-shadow: inset 0 0 0 1px var(--line2); }
+.mpk-logo { width: 96px; height: 96px; image-rendering: pixelated; }
+.mpk-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mpk-h b { color: var(--hi); font: 700 22px Cond, sans-serif; letter-spacing: .03em; }
+.mpk-h span { color: var(--tx2); font-size: 12.5px; }
+.mpk-h span.on { color: var(--br); }
+.mpk-body p { margin: 2px 0 10px; color: var(--tx); font-size: 13.5px; }
+.mpk-mods { display: flex; flex-wrap: wrap; gap: 6px; }
+.mpk-mods span { padding: 2px 8px; border-radius: 2px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--tx2); font-size: 12px; }
+.mpk-mods span.on { color: var(--hi); box-shadow: inset 0 0 0 1px rgba(27,217,106,.55); }
+.mpk-act { display: grid; gap: 8px; justify-items: center; }
+.mpk-act .btn { min-width: 160px; }
+@media (max-width: 900px) { .mpk { grid-template-columns: 72px minmax(0, 1fr); } .mpk-logo { width: 72px; height: 72px; } .mpk-act { grid-column: 1 / -1; justify-items: start; } }
