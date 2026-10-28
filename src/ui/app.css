@@ -402,6 +402,8 @@ input[type=range] { accent-color: var(--br); }
 .mpk-mods { display: flex; flex-wrap: wrap; gap: 6px; }
 .mpk-mods span { padding: 2px 8px; border-radius: 2px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--tx2); font-size: 12px; }
 .mpk-mods span.on { color: var(--hi); box-shadow: inset 0 0 0 1px rgba(27,217,106,.55); }
+.mpk-mods span.na { opacity: .55; text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
+.mpk-mods span em { font-style: normal; font-size: 11px; color: var(--tx2); text-decoration: none; display: inline-block; margin-left: 4px; }
 .mpk-act { display: grid; gap: 8px; justify-items: center; }
 .mpk-act .btn { min-width: 160px; }
 @media (max-width: 900px) { .mpk { grid-template-columns: 72px minmax(0, 1fr); } .mpk-logo { width: 72px; height: 72px; } .mpk-act { grid-column: 1 / -1; justify-items: start; } }

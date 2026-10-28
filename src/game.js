@@ -723,11 +723,13 @@ const MOD_PACKS = [{
 async function installModPack(root, mc, loader, packId, progress) {
   const pk = MOD_PACKS.find((p) => p.id === packId);
   if (!pk) throw new Error('Unknown pack.');
-  const done = [], skipped = [];
+  const done = [], skipped = [], skippedIds = [];
   for (const [id, name] of pk.mods) {
     if (progress) progress(name, done.length + skipped.length, pk.mods.length);
-    try { await installMod(root, mc, loader, id); done.push(name); } catch (e) { skipped.push(name); }
+    try { await installMod(root, mc, loader, id); done.push(name); } catch (e) { skipped.push(name); skippedIds.push(id); }
   }
+  // remember which mods are not out for this version, so the page shows them as such
+  try { const f = path.join(modsDir(root, mc, loader), '.craftrank-packs.json'); let j = {}; try { j = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; } catch (e) {} j[pk.id] = { na: skippedIds, at: Date.now() }; fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(j)); } catch (e) {}
   if (!done.length) throw new Error('None of the ' + pk.title + ' mods are out for Minecraft ' + mc + ' with ' + loaderName(loader) + ' yet.');
   return { done, skipped };
 }
@@ -740,8 +742,12 @@ function removeModPack(root, mc, loader, packId) {
 }
 /** How many of each pack's mods are installed in this version. */
 function modPackState(root, mc, loader) {
-  const { st } = modState(root, mc, loader);
-  return MOD_PACKS.map((p) => ({ id: p.id, title: p.title, about: p.about, loader: p.loader, mods: p.mods.map(([id, name, what]) => ({ id, name, what, on: !!(st[id] && !st[id].dep) })) }));
+  const { st, dir } = modState(root, mc, loader);
+  let pj = {}; try { pj = JSON.parse(fs.readFileSync(path.join(dir, '.craftrank-packs.json'), 'utf8')) || {}; } catch (e) {}
+  return MOD_PACKS.map((p) => {
+    const na = (pj[p.id] && Array.isArray(pj[p.id].na)) ? pj[p.id].na : [];
+    return { id: p.id, title: p.title, about: p.about, loader: p.loader, mc, mods: p.mods.map(([id, name, what]) => { const on = !!(st[id] && !st[id].dep); return { id, name, what, on, na: !on && na.includes(id) }; }) };
+  });
 }
 
 /** Before the game starts: puts back mods whose file went missing (removed by hand, or by a mod pack). */

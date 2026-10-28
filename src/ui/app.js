@@ -625,11 +625,11 @@ const mpk = { packs: [], work: '' };
 async function loadModPacks() { const r = await cr.mods.packs(); if (r && r.ok) { mpk.packs = r.packs; renderModPacks(); } }
 function renderModPacks() {
   $('#mdPacks').innerHTML = mpk.packs.map((p) => {
-    const n = p.mods.filter((m) => m.on).length, all = n === p.mods.length;
+    const n = p.mods.filter((m) => m.on).length, all = n > 0 && p.mods.every((m) => m.on || m.na);
     return `<div class="mpk"><img class="mpk-logo" src="${p.id}-pack.png" alt="">
       <div class="mpk-body"><div class="mpk-h"><b>${esc(p.title)}</b><span>${p.mods.length} mods · Fabric</span>${n ? `<span class="on">${n} installed</span>` : ''}</div>
         <p>${esc(p.about)}</p>
-        <div class="mpk-mods">${p.mods.map((m) => `<span class="${m.on ? 'on' : ''}" title="${esc(m.what)}">${esc(m.name)}</span>`).join('')}</div></div>
+        <div class="mpk-mods">${p.mods.map((m) => `<span class="${m.on ? 'on' : m.na ? 'na' : ''}" title="${esc(m.na ? 'Not out for Minecraft ' + p.mc + ' yet' : m.what)}">${esc(m.name)}${m.na ? ' <em>not for ' + esc(p.mc) + '</em>' : ''}</span>`).join('')}</div></div>
       <div class="mpk-act"><button class="btn ${n ? 'plain' : 'blue'}" data-mpk="${p.id}" data-has="${n ? 1 : ''}"${mpk.work ? ' disabled' : ''}>${mpk.work === p.id ? 'Installing…' : all ? 'Remove pack' : n ? 'Install the rest' : 'Install pack'}</button>
         ${n && !all ? `<a href="#" class="more" data-mpkrm="${p.id}">Remove pack</a>` : ''}</div></div>`;
   }).join('');
@@ -639,7 +639,7 @@ $('#mdPacks').addEventListener('click', async (e) => {
   const rm = e.target.closest('[data-mpkrm]'), b = e.target.closest('[data-mpk]');
   if (rm) { e.preventDefault(); const r = await cr.mods.packRemove(rm.dataset.mpkrm); if (r.ok) { mpk.packs = r.packs; renderModPacks(); loadMods(true); toast('Pack removed.'); } else toast(r.error); return; }
   if (!b || b.disabled) return;
-  const p = mpk.packs.find((x) => x.id === b.dataset.mpk), all = p && p.mods.every((m) => m.on);
+  const p = mpk.packs.find((x) => x.id === b.dataset.mpk), all = p && p.mods.some((m) => m.on) && p.mods.every((m) => m.on || m.na);
   if (all) { const r = await cr.mods.packRemove(p.id); if (r.ok) { mpk.packs = r.packs; renderModPacks(); loadMods(true); toast('Pack removed.'); } else toast(r.error); return; }
   mpk.work = p.id; renderModPacks();
   const r = await cr.mods.packInstall(p.id);
