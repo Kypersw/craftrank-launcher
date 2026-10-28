@@ -105,7 +105,9 @@ async function startServer(root, id, onLine, progress) {
   const mem = int(s.memory, 512, 65536, 2048);
   const java = consoleJava(await ensureJava(root, javaFor(s.type, s.version), progress));
   const args = ['-Xms' + Math.min(1024, mem) + 'M', '-Xmx' + mem + 'M', '-jar', 'server.jar'];
-  if (!TYPES[s.type].proxy) args.push('--nogui');
+  // Without the server window: the plain word "nogui" works on every version (tested 1.8.8 to 1.21), while
+  // CraftBukkit-based servers up to 1.13 stop at once with their help text when given "--nogui"
+  if (!TYPES[s.type].proxy) args.push('nogui');
   const child = spawn(java, args, { cwd: s.dir, windowsHide: true });
   const entry = { child, log: [] };
   procs.set(id, entry);
