@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { safeStorage, net } = require('electron');
 
-module.exports = function makeAccount(base, file, version) {
+module.exports = function makeAccount(base, file, version, installId) {
   // the PHP file directly, so it works even when the site's .htaccess has no rewrite for /api/launcher/
   const api = base.replace(/\/+$/, '') + '/api/launcher.php?r=';
   // Read the saved session on first use, after the app is ready: before that Windows' safeStorage
@@ -39,6 +39,9 @@ module.exports = function makeAccount(base, file, version) {
   async function call(route, opts = {}) {
     const headers = { 'User-Agent': 'CraftRankLauncher/' + version, Accept: 'application/json' };
     if (tok()) headers.Authorization = 'Bearer ' + tok();
+    // anonymous id of this install, so the site counts each PC once (only when usage statistics are on)
+    const inst = typeof installId === 'function' ? installId() : '';
+    if (inst) headers['X-CR-Install'] = inst;
     let body;
     if (opts.form) body = opts.form;
     else if (opts.json) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.json); }
@@ -66,6 +69,7 @@ module.exports = function makeAccount(base, file, version) {
     signedIn: () => !!tok(),
     config: () => call('config'),
     feed: () => call('feed'),
+    event: (j) => call('event', { json: j }),
     async login(login, password) { const r = await call('login', { json: { login, password } }); if (r.ok) save(r.token); delete r.token; return r; },
     async logout() { if (tok()) await call('logout', { json: {} }); save(''); return { ok: true }; },
     me: () => tok() ? call('me') : Promise.resolve({ ok: false, error: 'signed_out' }),

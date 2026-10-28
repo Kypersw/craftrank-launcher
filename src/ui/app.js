@@ -509,6 +509,7 @@ function bindSettings(info) {
   $('#boostNow').addEventListener('click', async () => { state.settings = await cr.save({ boost: true, boostStamp: Date.now() }); $('#setBoost').checked = true; renderBoost(); toast('Done. Every version gets the best settings for this PC the next time it starts.'); });
   renderBoost();
   $('#setSkins').checked = s.skinsOnServers !== false; $('#setSkins').addEventListener('change', async (e) => { state.settings = await cr.save({ skinsOnServers: e.target.checked }); });
+  $('#setStats').checked = s.stats !== false; $('#setStats').addEventListener('change', async (e) => { state.settings = await cr.save({ stats: e.target.checked }); });
   $('#setDiscord').checked = s.discord !== false; $('#setDiscord').addEventListener('change', async (e) => { state.settings = await cr.save({ discord: e.target.checked }); });
   $('#setClose').checked = !!s.closeOnPlay; $('#setClose').addEventListener('change', async (e) => { state.settings = await cr.save({ closeOnPlay: e.target.checked }); });
   $('#setSnap').checked = !!s.showSnapshots; $('#setOld').checked = !!s.showOld; $('#setPerf').checked = s.pack === 'perf';

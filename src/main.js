@@ -52,7 +52,26 @@ const discord = require('./discord')();
 const SITE = process.env.CRAFTRANK_SITE || 'https://craftrank.org';
 const ROOT = path.join(app.getPath('appData'), '.craftrank');           // game files live here, apart from .minecraft
 const SETTINGS = path.join(app.getPath('userData'), 'settings.json');
-const account = require('./account')(SITE, path.join(app.getPath('userData'), 'session.bin'), app.getVersion());
+/* Anonymous usage statistics (Settings: "Send anonymous usage statistics"): a random id for this install,
+   and a note to the site when a game starts or ends (Minecraft version, loader, server, minutes, kind of PC).
+   No name, account or file is sent. Off: nothing is sent and the id is not used. */
+let installIdCache = null;
+function installId() {
+  if (readSettings().stats === false) return '';
+  if (installIdCache) return installIdCache;
+  const f = path.join(app.getPath('userData'), 'install-id');
+  try { const t = fs.readFileSync(f, 'utf8').trim(); if (/^[a-f0-9]{32}$/.test(t)) return (installIdCache = t); } catch (e) {}
+  installIdCache = crypto.randomBytes(16).toString('hex');
+  try { fs.writeFileSync(f, installIdCache); } catch (e) {}
+  return installIdCache;
+}
+const account = require('./account')(SITE, path.join(app.getPath('userData'), 'session.bin'), app.getVersion(), installId);
+function winName() {
+  if (process.platform !== 'win32') return os.type().slice(0, 24);
+  const b = +String(os.release()).split('.')[2] || 0;
+  return b >= 22000 ? 'Windows 11' : b >= 10240 ? 'Windows 10' : 'Windows ' + String(os.release()).split('.').slice(0, 2).join('.');
+}
+function stat(j) { if (readSettings().stats !== false) account.event(j).catch(() => {}); }
 
 let win = null;
 let running = null;     // the Minecraft process
@@ -61,7 +80,7 @@ let busy = false;
 function readSettings() {
   const ram = Math.floor(os.totalmem() / 1048576);
   const def = { username: '', mc: '', loader: 'vanilla', loaderVersion: '', pack: 'none', playAs: 'offline', performance: false, showSnapshots: false, showOld: false,
-    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false, discord: true, skinsOnServers: true, boost: true };
+    memory: Math.min(4096, Math.max(ram >= 6000 ? 2048 : 1024, Math.floor(ram / 4 / 512) * 512)), closeOnPlay: false, discord: true, skinsOnServers: true, boost: true, stats: true };
   try { return Object.assign(def, JSON.parse(fs.readFileSync(SETTINGS, 'utf8'))); } catch (e) { return def; }
 }
 function writeSettings(s) { fs.mkdirSync(path.dirname(SETTINGS), { recursive: true }); fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2)); }
@@ -201,7 +220,7 @@ ipcMain.handle('open', (e, url) => { safeOpen(url); });
 ipcMain.handle('settings:get', () => readSettings());
 // only known settings, each with its own type, are saved
 const SETTING_TYPES = { username: 'string', mc: 'string', loader: 'string', loaderVersion: 'string', pack: 'string', playAs: 'string', playAsChosen: 'boolean',
-  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean', skinsOnServers: 'boolean', theme: 'string', boost: 'boolean', boostStamp: 'number' };
+  performance: 'boolean', showSnapshots: 'boolean', showOld: 'boolean', memory: 'number', closeOnPlay: 'boolean', updSnooze: 'object', discord: 'boolean', skinsOnServers: 'boolean', theme: 'string', boost: 'boolean', boostStamp: 'number', stats: 'boolean' };
 ipcMain.handle('settings:set', (e, s) => {
   const cur = readSettings();
   for (const [k, v] of Object.entries(s && typeof s === 'object' ? s : {})) {
@@ -354,6 +373,9 @@ ipcMain.handle('play', async (e, opts) => {
     const memory = Math.min(Math.max(s.memory, floor), Math.max(1024, Math.floor(ram * 0.6 / 512) * 512));
     const srv = opts.server && typeof opts.server.host === 'string' ? opts.server : null;
     running = await game.start(ROOT, prep, acct, { memory, server: srv ? { host: srv.host, port: +srv.port || 25565 } : null, skinServer, skinRoot, boost: !!boost });
+    const sid = crypto.randomBytes(8).toString('hex'), t0 = Date.now(), pc = await boostTier();
+    stat({ type: 'start', sid, mc, loader: picked, boost: boost ? boost.tier : '', server: srv ? String(srv.host).slice(0, 100) : '',
+      os: winName(), ram: pc.ram, alloc: memory, cores: pc.cores, gpu: pc.vendor || 'other' });
     presence('play', {
       since: Date.now(), version: 'Minecraft ' + mc + (picked !== 'vanilla' ? ' · ' + picked[0].toUpperCase() + picked.slice(1) : ''),
       server: srv ? { name: String(srv.name || srv.host).slice(0, 60), address: srv.host + (+srv.port && +srv.port !== 25565 ? ':' + +srv.port : ''), icon: srv.icon, url: srv.url } : null,
@@ -369,11 +391,12 @@ ipcMain.handle('play', async (e, opts) => {
     if (running.stdout) running.stdout.on('data', take);
     if (running.stderr) running.stderr.on('data', take);
     running.on('close', () => { if (out) out.end(); });
-    running.on('exit', (code) => { running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
+    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1 }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
     if (s.closeOnPlay) win.hide();
     return { ok: true };
   } catch (err) {
     console.error(err);
+    stat({ type: 'fail', sid: crypto.randomBytes(8).toString('hex'), mc: String(opts.mc || s.mc || ''), loader: String(opts.loader || s.loader || 'vanilla'), error: String(friendly(err)).slice(0, 80) });
     return { ok: false, error: friendly(err) };
   } finally {
     busy = false;
