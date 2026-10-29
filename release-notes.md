@@ -1,4 +1,3 @@
-## 1.10.14
+## 1.10.15
 
-- Cosmetics: 24 new ones (glasses, masks, helmets, halo, scarf, vest, backpack and more), now also for the body.
-- Each cosmetic shows a 3D preview card, so you can see how it looks before wearing it.
+- Cosmetic cards now look like in-game item tooltips.
