@@ -125,7 +125,13 @@ final class Anim {
             Px px;
             if (a[4] instanceof Long && fmt == RGBA && type == UBYTE) {
                 long base = (Long) a[4];
-                if (base == 0) return null;
+                // Only read memory when the long really is an address: with a pixel buffer (PBO) bound it is an
+                // offset into that buffer (Minecraft 26.x uploads this way), and reading it crashes the game.
+                if (base < 0x10000L) return null;
+                gl((Class<?>) a[5]);
+                if (getInt == null || (Integer) getInt.invoke(null, UNPACK_BUFFER_BINDING) != 0) return null;
+                int rl = (Integer) getInt.invoke(null, ROW_LENGTH);
+                if ((rl != 0 && rl != w) || (Integer) getInt.invoke(null, SKIP_ROWS) != 0 || (Integer) getInt.invoke(null, SKIP_PIXELS) != 0) return null;
                 px = i -> { int v = peek(base + 4L * i); return (v & 0xFF00FF00) | (v & 0xFF) << 16 | (v >>> 16) & 0xFF; };
             } else if (a[4] instanceof IntBuffer && fmt == BGRA && type == UINT_8888_REV) {
                 IntBuffer b = (IntBuffer) a[4]; int pos = b.position();

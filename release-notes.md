@@ -1,1 +1,1 @@
-Minecraft 26.1 and newer start again. They closed right away with "Failed to locate library: lwjgl.dll" (on vanilla, Fabric, Forge and OptiFine), because the game now looks for its native files in a new place. Joining a server from the launcher on Fabric 1.20 and newer works again too.
+Minecraft 26.x no longer crashes while loading (EXCEPTION_ACCESS_VIOLATION in craftrank.skins.Anim): the animated cape helper read a texture upload the new game makes from a pixel buffer as if it were memory. It now leaves those uploads alone.
