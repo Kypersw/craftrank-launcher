@@ -282,7 +282,7 @@ ipcMain.handle('acct:skin', safe(async (e, slim) => {
 }));
 ipcMain.handle('acct:skinReset', () => account.resetSkin());
 ipcMain.handle('store', () => account.store());
-ipcMain.handle('store:equip', (e, kind, id) => account.equip(kind === 'skin' ? 'skin' : 'cape', id ? +id : 0));
+ipcMain.handle('store:equip', (e, kind, id, on) => account.equip(['skin', 'overlay'].includes(kind) ? kind : 'cape', id ? +id : 0, on !== false));
 /* CraftRank Premium: the payment page (Creem) opens in the browser */
 ipcMain.handle('premium', () => account.premium());
 ipcMain.handle('premium:buy', safe(async (e, plan) => {

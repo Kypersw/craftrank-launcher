@@ -260,6 +260,7 @@ async function renderAccount() {
   await drawSkin($('#skinCanvas'), skinItem ? skinItem.texture : pr && pr.skin, skinItem ? skinItem.slim : pr && pr.slim);
   renderPremium();
   await loadCapes();
+  loadCosmetics();
   loadWardrobe();
 }
 
@@ -430,6 +431,48 @@ $('#prCapes').addEventListener('click', async (e) => {
   if (state.me) state.me.profile = r.profile;
   toast(id ? 'Cape on. It shows next time you start the game.' : 'Cape taken off.');
   renderCapes();
+});
+/* ---------- cosmetics painted onto the skin (Admin → Launcher, kind "overlay") ---------- */
+const cosUi = { items: [] };
+const SLOT = { face: 'Face', head: 'Head', body: 'Body' };
+function imgOf(src) { return new Promise((ok) => { if (!src) return ok(null); const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; }); }
+/** The head's front: the player's face with the cosmetic's outer layer on top. */
+async function drawCos(cv, tex, base) {
+  const x = cv.getContext('2d'); x.imageSmoothingEnabled = false; x.clearRect(0, 0, cv.width, cv.height);
+  const [b, o] = await Promise.all([imgOf(base), imgOf(tex)]);
+  if (b) x.drawImage(b, 8, 8, 8, 8, 0, 0, cv.width, cv.height); else { x.fillStyle = '#2a2d31'; x.fillRect(0, 0, cv.width, cv.height); }
+  if (o) x.drawImage(o, 40, 8, 8, 8, 0, 0, cv.width, cv.height);
+}
+async function loadCosmetics() {
+  const r = await cr.store();
+  cosUi.items = r && r.ok ? (r.items || []).filter((it) => it.kind === 'overlay' && (it.owned || it.premium)) : [];
+  $('#prCos').hidden = !cosUi.items.length;
+  renderCosmetics();
+}
+function renderCosmetics() {
+  if (!cosUi.items.length) return;
+  const pr = state.me && state.me.profile, worn = (pr && pr.overlays) || [];
+  const order = Object.keys(SLOT);
+  const list = cosUi.items.slice().sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot) || a.name.localeCompare(b.name));
+  $('#cosList').innerHTML = list.map((it) => `<button class="cape cos${worn.includes(it.id) ? ' on' : ''}${it.premium ? ' prem' : ''}${it.owned ? '' : ' lock'}" data-cos="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
+    <canvas width="64" height="64" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b><small>${worn.includes(it.id) ? 'Wearing · click to take off' : it.owned ? esc(SLOT[it.slot] || 'Cosmetic') : 'Premium'}</small></button>`).join('');
+  $('#cosList').querySelectorAll('canvas[data-tex]').forEach((cv) => drawCos(cv, cv.dataset.tex, pr && pr.skin));
+  $('#cosHint').hidden = !!pr;
+}
+$('#prCos').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-cos]'); if (!b || b.disabled) return;
+  const id = +b.dataset.cos, pr = state.me && state.me.profile;
+  if (!pr) return toast('Pick your in-game name first.');
+  const it = cosUi.items.find((x) => x.id === id);
+  if (it && !it.owned) { toast('This cosmetic is part of CraftRank Premium.'); return goPremium(); }
+  const on = !(pr.overlays || []).includes(id);
+  b.disabled = true;
+  const r = await cr.equip('overlay', id, on);
+  b.disabled = false;
+  if (!r.ok) return toast(r.error || 'Could not change it.');
+  if (state.me) state.me.profile = r.profile;
+  toast(on ? 'On. It shows next time you start the game.' : 'Taken off.');
+  renderCosmetics();
 });
 $('#signin').addEventListener('submit', async (e) => {
   e.preventDefault(); $('#siBtn').disabled = true;

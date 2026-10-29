@@ -407,3 +407,6 @@ input[type=range] { accent-color: var(--br); }
 .mpk-act { display: grid; gap: 8px; justify-items: center; }
 .mpk-act .btn { min-width: 160px; }
 @media (max-width: 900px) { .mpk { grid-template-columns: 72px minmax(0, 1fr); } .mpk-logo { width: 72px; height: 72px; } .mpk-act { grid-column: 1 / -1; justify-items: start; } }
+
+/* cosmetics: the head's front, big and crisp */
+.cos canvas { width: 64px; height: 64px; margin: 4px 0 6px; image-rendering: pixelated; border-radius: 2px; filter: drop-shadow(0 5px 8px rgba(0,0,0,.5)); }

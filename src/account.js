@@ -82,7 +82,7 @@ module.exports = function makeAccount(base, file, version, installId) {
     },
     resetSkin() { const fd = new FormData(); fd.append('reset', '1'); return call('skin', { form: fd }); },
     store: () => call('store'),
-    equip: (kind, item) => call('equip', { json: { kind, item } }),
+    equip: (kind, item, on = true) => call('equip', { json: { kind, item, on } }),
     premium: () => call('premium'),
     premiumBuy: (plan) => call('premium_buy', { json: { plan } }),
     outfits: () => call('outfits'),

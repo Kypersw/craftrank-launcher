@@ -1,1 +1,1 @@
-Quilt is no longer offered for Minecraft 26.x: Quilt Loader cannot start those versions yet ("Unsupported class file major version 69"). Use Fabric for 26.x.
+New on the Account page: Cosmetics. Glasses, masks, bandanas, crowns and headphones drawn onto your CraftRank skin, so every player sees them, on every Minecraft version. Wear one per slot (face, head, body); some are for Premium members.
