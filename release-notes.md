@@ -1,1 +1,1 @@
-Animated capes work on Minecraft 26.x again (the new game uploads skins differently and shows frames through SDL). Fabric for Minecraft 26.x installs again: it failed with "no such file or directory ... versions\\0.0.0\\0.0.0.json".
+Quilt is no longer offered for Minecraft 26.x: Quilt Loader cannot start those versions yet ("Unsupported class file major version 69"). Use Fabric for 26.x.

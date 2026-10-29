@@ -232,7 +232,8 @@ async function catalog() {
     'forge-optifine': of ? Object.keys(of).filter((mc) => forgeMc.includes(mc) && of[mc].some((x) => x.forge && !/N\/A/i.test(x.forge))) : [],
     forge: forgeMc,
     fabric: fabric ? fabric.filter((v) => v.stable).map((v) => v.version) : [],
-    quilt: quilt ? quilt.filter((v) => v.stable).map((v) => v.version) : [],
+    // Quilt Loader cannot read Minecraft 26.x (Java 25 classes) yet: Fabric covers those versions
+    quilt: quilt ? quilt.filter((v) => v.stable && !/^\d{2}\./.test(v.version)).map((v) => v.version) : [],
     neoforge: neoMc,
   };
   if (of && forge) catCache = { at: Date.now(), data };
@@ -431,6 +432,7 @@ async function prepare(root, opts, progress) {
     const via = await boostLoader(opts.mc);
     if (via) { loader = via.loader; opts = Object.assign({}, opts, { loaderVersion: via.lv }); boosted = true; }
   }
+  if (loader === 'quilt' && /^\d{2}\./.test(String(opts.mc))) throw new Error('Quilt does not run Minecraft ' + opts.mc + ' yet. Pick Fabric ' + opts.mc + ' in the version menu instead.');
   if (loader !== 'vanilla') try {
     let lv = opts.loaderVersion;
     if (!lv) lv = (await loaderVersions(loader, opts.mc))[0];
