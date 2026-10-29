@@ -455,7 +455,7 @@ function renderCosmetics() {
   const order = Object.keys(SLOT);
   const list = cosUi.items.slice().sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot) || a.name.localeCompare(b.name));
   $('#cosList').innerHTML = list.map((it) => `<button class="cape cos${worn.includes(it.id) ? ' on' : ''}${it.premium ? ' prem' : ''}${it.owned ? '' : ' lock'}" data-cos="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
-    <canvas width="64" height="64" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b><small>${worn.includes(it.id) ? 'Wearing · click to take off' : it.owned ? esc(SLOT[it.slot] || 'Cosmetic') : 'Premium'}</small></button>`).join('');
+    ${it.preview ? `<img class="cos-card" src="${esc(it.preview)}" alt="${esc(it.name)}" loading="lazy" draggable="false">` : `<canvas width="64" height="64" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b>`}<small>${worn.includes(it.id) ? 'Wearing · click to take off' : it.owned ? esc(SLOT[it.slot] || 'Cosmetic') : 'Premium'}</small></button>`).join('');
   $('#cosList').querySelectorAll('canvas[data-tex]').forEach((cv) => drawCos(cv, cv.dataset.tex, pr && pr.skin));
   $('#cosHint').hidden = !!pr;
 }

@@ -408,5 +408,12 @@ input[type=range] { accent-color: var(--br); }
 .mpk-act .btn { min-width: 160px; }
 @media (max-width: 900px) { .mpk { grid-template-columns: 72px minmax(0, 1fr); } .mpk-logo { width: 72px; height: 72px; } .mpk-act { grid-column: 1 / -1; justify-items: start; } }
 
+/* cosmetics: designed preview cards (the card carries the name), or the head's front as a fallback */
+#cosList { grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); }
+.cos:has(.cos-card) { padding: 6px 6px 8px; }
+.cos-card { width: 100%; aspect-ratio: 300 / 380; border-radius: 10px; display: block; margin-bottom: 4px; box-shadow: 0 6px 14px rgba(0,0,0,.45); transition: transform .15s ease; }
+.cos:hover:not(:disabled) .cos-card { transform: translateY(-2px); }
+.cape.lock .cos-card { filter: saturate(.6) brightness(.72); }
 /* cosmetics: the head's front, big and crisp */
 .cos canvas { width: 64px; height: 64px; margin: 4px 0 6px; image-rendering: pixelated; border-radius: 2px; filter: drop-shadow(0 5px 8px rgba(0,0,0,.5)); }
+.cos.lock:has(.cos-card)::after { top: auto; bottom: 9px; right: 10px; }

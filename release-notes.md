@@ -1,1 +1,4 @@
-New on the Account page: Cosmetics. Glasses, masks, bandanas, crowns and headphones drawn onto your CraftRank skin, so every player sees them, on every Minecraft version. Wear one per slot (face, head, body); some are for Premium members.
+## 1.10.14
+
+- Cosmetics: 24 new ones (glasses, masks, helmets, halo, scarf, vest, backpack and more), now also for the body.
+- Each cosmetic shows a 3D preview card, so you can see how it looks before wearing it.
