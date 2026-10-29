@@ -123,18 +123,28 @@ final class Anim {
             Object[] a = (Object[]) o;
             int w = (Integer) a[0], h = (Integer) a[1], fmt = (Integer) a[2], type = (Integer) a[3];
             Px px;
-            if (a[4] instanceof Long && fmt == RGBA && type == UBYTE) {
-                long base = (Long) a[4];
-                // Only read memory when the long really is an address: with a pixel buffer (PBO) bound it is an
-                // offset into that buffer (Minecraft 26.x uploads this way), and reading it crashes the game.
-                if (base < 0x10000L) return null;
+            Object p = a[4];
+            if ((p instanceof Long || p instanceof ByteBuffer) && fmt == RGBA && type == UBYTE) {
                 gl((Class<?>) a[5]);
-                if (getInt == null || (Integer) getInt.invoke(null, UNPACK_BUFFER_BINDING) != 0) return null;
-                int rl = (Integer) getInt.invoke(null, ROW_LENGTH);
-                if ((rl != 0 && rl != w) || (Integer) getInt.invoke(null, SKIP_ROWS) != 0 || (Integer) getInt.invoke(null, SKIP_PIXELS) != 0) return null;
-                px = i -> { int v = peek(base + 4L * i); return (v & 0xFF00FF00) | (v & 0xFF) << 16 | (v >>> 16) & 0xFF; };
-            } else if (a[4] instanceof IntBuffer && fmt == BGRA && type == UINT_8888_REV) {
-                IntBuffer b = (IntBuffer) a[4]; int pos = b.position();
+                if (getInt == null) return null;
+                // the game may upload part of a bigger image (Minecraft 1.21.5+ and 26.x set row length and skips)
+                int rl = (Integer) getInt.invoke(null, ROW_LENGTH), sr = (Integer) getInt.invoke(null, SKIP_ROWS), sp = (Integer) getInt.invoke(null, SKIP_PIXELS);
+                final int stride = rl > 0 ? rl : w;
+                if (stride < w || sr < 0 || sp < 0) return null;
+                if (p instanceof Long) {
+                    // Only read memory when the long really is an address: with a pixel buffer (PBO) bound it is an
+                    // offset into that buffer (Minecraft 26.x streams some textures this way), and reading it crashes.
+                    long base = (Long) p;
+                    if (base < 0x10000L || (Integer) getInt.invoke(null, UNPACK_BUFFER_BINDING) != 0) return null;
+                    px = i -> { int v = peek(base + 4L * ((long) (i / w + sr) * stride + i % w + sp)); return (v & 0xFF00FF00) | (v & 0xFF) << 16 | (v >>> 16) & 0xFF; };
+                } else {
+                    // Minecraft 26.x: NativeImage pixels come as a ByteBuffer (R, G, B, A bytes)
+                    ByteBuffer b = (ByteBuffer) p; int pos = b.position();
+                    if ((long) b.limit() - pos < 4L * ((long) (h - 1 + sr) * stride + sp + w)) return null;
+                    px = i -> { int q = pos + 4 * ((i / w + sr) * stride + i % w + sp); return (b.get(q + 3) & 0xFF) << 24 | (b.get(q) & 0xFF) << 16 | (b.get(q + 1) & 0xFF) << 8 | (b.get(q + 2) & 0xFF); };
+                }
+            } else if (p instanceof IntBuffer && fmt == BGRA && type == UINT_8888_REV) {
+                IntBuffer b = (IntBuffer) p; int pos = b.position();
                 if (b.remaining() < w * h) return null;
                 px = i -> b.get(pos + i);
             } else return null;

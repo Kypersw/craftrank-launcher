@@ -1,1 +1,1 @@
-Minecraft 26.x no longer crashes while loading (EXCEPTION_ACCESS_VIOLATION in craftrank.skins.Anim): the animated cape helper read a texture upload the new game makes from a pixel buffer as if it were memory. It now leaves those uploads alone.
+Animated capes work on Minecraft 26.x again (the new game uploads skins differently and shows frames through SDL). Fabric for Minecraft 26.x installs again: it failed with "no such file or directory ... versions\\0.0.0\\0.0.0.json".

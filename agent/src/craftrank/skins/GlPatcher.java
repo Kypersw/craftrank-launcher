@@ -23,7 +23,8 @@ final class GlPatcher implements ClassFileTransformer {
     public byte[] transform(ClassLoader loader, String name, Class<?> cls, ProtectionDomain pd, byte[] bytes) {
         if (name == null) return null;
         boolean gl = name.equals("org/lwjgl/opengl/GL11") || name.equals("org/lwjgl/opengl/GL11C");
-        boolean swap = name.equals("org/lwjgl/glfw/GLFW") || name.equals("org/lwjgl/opengl/Display");
+        // Minecraft 26.x shows frames through SDL instead of GLFW
+        boolean swap = name.equals("org/lwjgl/glfw/GLFW") || name.equals("org/lwjgl/opengl/Display") || name.equals("org/lwjgl/sdl/SDLVideo");
         if (!gl && !swap) return null;
         final String owner = name;
         try {
@@ -37,9 +38,9 @@ final class GlPatcher implements ClassFileTransformer {
                     MethodVisitor mv = super.visitMethod(acc, m, desc, sig, ex);
                     if ((acc & Opcodes.ACC_STATIC) == 0 || (acc & Opcodes.ACC_NATIVE) != 0) return mv;
                     int kind = 0;
-                    if (gl && m.equals("glTexSubImage2D") && (desc.equals("(IIIIIIIIJ)V") || desc.equals("(IIIIIIIILjava/nio/IntBuffer;)V"))) kind = 1;
+                    if (gl && m.equals("glTexSubImage2D") && (desc.equals("(IIIIIIIIJ)V") || desc.equals("(IIIIIIIILjava/nio/IntBuffer;)V") || desc.equals("(IIIIIIIILjava/nio/ByteBuffer;)V"))) kind = 1;
                     else if (gl && m.equals("glDeleteTextures") && desc.equals("(I)V")) kind = 2;
-                    else if (swap && ((m.equals("glfwSwapBuffers") && desc.equals("(J)V")) || (m.equals("swapBuffers") && desc.equals("()V")))) kind = 3;
+                    else if (swap && ((m.equals("glfwSwapBuffers") && desc.equals("(J)V")) || (m.equals("swapBuffers") && desc.equals("()V")) || (m.equals("SDL_GL_SwapWindow") && desc.equals("(J)Z")))) kind = 3;
                     if (kind == 0) return mv;
                     n[0]++;
                     return new Prologue(mv, kind, owner, desc, frames);

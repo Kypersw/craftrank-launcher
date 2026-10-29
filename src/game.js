@@ -258,6 +258,16 @@ async function boostLoader(mc) {
   return via;
 }
 
+/** Writes Fabric's launcher profile (meta.fabricmc.net) as a version that inherits from the Minecraft version. */
+async function fabricProfile(root, mc, lv) {
+  const j = await getJson('https://meta.fabricmc.net/v2/versions/loader/' + encodeURIComponent(mc) + '/' + encodeURIComponent(lv) + '/profile/json');
+  if (!j || typeof j.id !== 'string' || !/^[A-Za-z0-9._+-]+$/.test(j.id) || j.inheritsFrom !== mc) throw new Error('Fabric is not ready for Minecraft ' + mc + ' yet.');
+  const dir = path.join(root, 'versions', j.id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, j.id + '.json'), JSON.stringify(j));
+  return j.id;
+}
+
 async function loaderVersions(loader, mc) {
   try {
     if (loader === 'optifine' || loader === 'forge-optifine') return ((await optifineList())[mc] || []).map((x) => x.file);
@@ -434,7 +444,12 @@ async function prepare(root, opts, progress) {
       progress('Installing Forge ' + fv, 0);
       id = await forgeLike('Forge', installForgeTask({ mcversion: opts.mc, version: fv }, root, forgeOpts(java)), progress);
     }
-    else if (loader === 'fabric') id = await installFabric(await getFabricLoaderArtifact(opts.mc, lv), root, DL);
+    else if (loader === 'fabric') {
+      const art = await getFabricLoaderArtifact(opts.mc, lv);
+      // Minecraft 26.x has no intermediary mappings (Fabric reports "0.0.0"): the installer would then make a
+      // version called 0.0.0 that inherits from nothing. Use Fabric's own launcher profile for those versions.
+      id = art.intermediary && art.intermediary.version === opts.mc ? await installFabric(art, root, DL) : await fabricProfile(root, opts.mc, art.loader.version);
+    }
     else if (loader === 'quilt') id = await installQuiltVersion({ minecraftVersion: opts.mc, version: lv, minecraft: root });
     else if (loader === 'forge') id = await forgeLike('Forge', installForgeTask({ mcversion: opts.mc, version: lv }, root, forgeOpts(java)), progress);
     else if (loader === 'neoforge') id = await forgeLike('NeoForge', installNeoForgedTask('neoforge', lv, root, forgeOpts(java, true)), progress);
