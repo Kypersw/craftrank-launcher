@@ -1,1 +1,1 @@
-PvP Pack: mods that are not out for your Minecraft version yet are now crossed out with "not for 1.20.1" (or your version), instead of looking like they failed to install. When every mod that is out for your version is installed, the button shows "Remove pack".
+Minecraft 26.1 and newer start again. They closed right away with "Failed to locate library: lwjgl.dll" (on vanilla, Fabric, Forge and OptiFine), because the game now looks for its native files in a new place. Joining a server from the launcher on Fabric 1.20 and newer works again too.

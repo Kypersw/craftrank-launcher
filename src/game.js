@@ -459,7 +459,7 @@ async function prepare(root, opts, progress) {
   // Skins on servers come from the CraftRank Skin Agent now (see start): the old skin mod is removed
   const skins = await syncSkinMod(instDir, opts.mc, loader, '', progress);
   if (opts.skinRoot) skins.on = true;
-  return { id, java, instDir, pack, skins, loader };
+  return { id, java, instDir, pack, skins, loader, mc: opts.mc };
 }
 
 /* ---------- CraftBoost: automatic FPS settings ---------- */
@@ -799,9 +799,17 @@ async function start(root, prep, account, opts) {
   if (skins) extraJVMArgs.push('-javaagent:' + skins + '=' + opts.skinRoot);
   if (opts.boost) extraJVMArgs.push(...BOOST_JVM);
   if (opts.boost) highPerformanceGpu(prep.java);
-  const quickPlay = mcAtLeast(String(prep.id).split('-')[0], 20);
+  const mcv = prep.mc || String(prep.id).split('-')[0];
+  const quickPlay = mcAtLeast(mcv, 20);
+  // Minecraft 26.x looks for its native libraries (lwjgl.dll…) in natives/java, natives/lwjgl… while the
+  // installer still unpacks them into the natives folder itself: tell LWJGL where they are, and make the folders.
+  const nativeRoot = path.join(root, 'versions', prep.id, prep.id + '-natives');
+  if (/^\d{2}\./.test(mcv)) {
+    for (const d of ['', 'java', 'jna', 'lwjgl', 'netty']) { try { fs.mkdirSync(path.join(nativeRoot, d), { recursive: true }); } catch (e) {} }
+    extraJVMArgs.push('-Dorg.lwjgl.librarypath=' + nativeRoot);
+  }
   const proc = await launch({
-    gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id,
+    gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id, nativeRoot,
     gameProfile: { name: account.name, id: account.uuid }, accessToken: account.token || account.uuid, userType: account.type || 'mojang',
     maxMemory: opts.memory, minMemory: opts.boost ? Math.floor(opts.memory / 2) : Math.min(1024, opts.memory),
     launcherName: 'CraftRank', launcherBrand: 'CraftRank Launcher',
