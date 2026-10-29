@@ -255,13 +255,15 @@ async function renderAccount() {
   const pr = state.me.profile;
   $('#prUser').textContent = state.me.user.name;
   $('#prName').value = pr ? pr.name : '';
-  const skinItem = null;
   $('#skinSlim').checked = !!(pr && pr.slim);
-  await drawSkin($('#skinCanvas'), skinItem ? skinItem.texture : pr && pr.skin, skinItem ? skinItem.slim : pr && pr.slim);
+  $$('#armSeg button').forEach((b) => b.classList.toggle('on', (b.dataset.slim === '1') === !!(pr && pr.slim)));
   renderPremium();
+  renderSkinHist();
+  renderSlots(); updateView();
   await loadCapes();
-  loadCosmetics();
+  await loadCosmetics();
   loadWardrobe();
+  syncTabs();
 }
 
 /* ---------- CraftRank Premium (bought here or on the site, same account) ---------- */
@@ -298,6 +300,130 @@ $('#ppBuy').addEventListener('click', async (e) => {
 });
 function goPremium() { const el = $('#prPrem'); if (el && !el.hidden) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 
+/* ---------- wardrobe page: tabs, the 3D character, what is worn ---------- */
+function wrTab(t) {
+  $$('#wrTabs [data-tab]').forEach((b) => { b.classList.toggle('on', b.dataset.tab === t); b.setAttribute('aria-selected', b.dataset.tab === t); });
+  $$('.wr-pane').forEach((p) => p.classList.toggle('on', p.dataset.pane === t));
+}
+function syncTabs() {   // a pane with nothing in it (no capes on the site, an older site without Premium) has no tab
+  let cur = ($('#wrTabs .on') || {}).dataset;
+  $$('#wrTabs [data-tab]').forEach((b) => { const p = $(`.wr-pane[data-pane="${b.dataset.tab}"]`); b.hidden = !!(p && p.hidden); });
+  if (!cur || $(`#wrTabs [data-tab="${cur.tab}"]`).hidden) wrTab('skin');
+  $('#wrSave').hidden = $('#prWard').hidden;
+}
+$('#wrTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) wrTab(b.dataset.tab); });
+$('#wrSave').addEventListener('click', () => { wrTab('outfits'); const i = $('#wardName'); if (i && !$('#wardNew').hidden) i.focus(); });
+
+// textures come through the launcher (the 3D view needs them as its own data, not a page from another site)
+const texCache = new Map();
+function texImg(url) {
+  if (!url) return Promise.resolve(null);
+  if (!texCache.has(url)) texCache.set(url, (cr.tex ? cr.tex(url) : Promise.resolve(null)).then((d) => imgOf(d)).catch(() => null));
+  return texCache.get(url);
+}
+let view = null, viewSeq = 0;
+async function updateView() {
+  const cv = $('#wrView'); if (!cv || !window.PlayerView) return;
+  if (!view) view = new PlayerView(cv);
+  const seq = ++viewSeq, pr = state.me && state.me.profile;
+  const worn = ((pr && pr.overlays) || []).map((id) => cosUi.items.find((it) => it.id === id)).filter(Boolean);
+  const cape = pr && pr.cape_item ? capeUi.items.find((it) => it.id === pr.cape_item) : null;
+  const [skin, ovs, cimg, aimg] = await Promise.all([texImg(pr && pr.skin), Promise.all(worn.map((it) => texImg(it.texture))), texImg(cape && cape.texture), texImg(cape && cape.anim && cape.anim.url)]);
+  if (seq !== viewSeq) return;
+  view.setSkin(skin, ovs, !!(pr && pr.slim));
+  view.setCape(cimg, aimg ? { img: aimg, fps: +cape.anim.fps || 12 } : null);
+}
+$('.wr-face').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-face]'); if (!b || !view) return;
+  $$('.wr-face button').forEach((x) => x.classList.toggle('on', x === b)); view.face(b.dataset.face === 'back');
+});
+
+function renderSlots() {
+  const pr = state.me && state.me.profile, el = $('#wrSlots'); if (!el) return;
+  const worn = ((pr && pr.overlays) || []).map((id) => cosUi.items.find((it) => it.id === id)).filter(Boolean);
+  const cape = pr && pr.cape_item ? capeUi.items.find((it) => it.id === pr.cape_item) : null;
+  const slot = (key, label, tab, inner, x, title) => `<button class="slot${inner ? '' : ' empty'}" data-go="${tab}" data-key="${key}" title="${esc(title || label)}"><span class="sq">${inner || '+'}</span>${x ? `<span class="x" data-off="${esc(x)}" title="Take off" aria-label="Take off ${esc(title || label)}">×</span>` : ''}${esc(label)}</button>`;
+  const parts = [slot('skin', 'Skin', 'skin', '<img alt="">', '', 'Your skin'),
+    slot('cape', 'Cape', 'capes', cape ? `<canvas class="tall" width="40" height="64" data-tex="${esc(cape.texture)}"></canvas>` : '', cape ? 'cape' : '', cape && cape.name)];
+  for (const k of Object.keys(SLOT)) { const it = worn.find((w) => w.slot === k); parts.push(slot(k, SLOT[k], 'cos', it ? `<canvas${k === 'body' ? ' class="tall"' : ''} width="${k === 'body' ? 32 : 48}" height="48" data-ov="${esc(it.texture)}" data-k="${k}"></canvas>` : '', it ? 'ov:' + it.id : '', it && it.name)); }
+  el.innerHTML = parts.join('');
+  drawHead(el.querySelector('[data-key="skin"] img'), pr && pr.skin, pr && pr.name);
+  el.querySelectorAll('canvas[data-tex]').forEach((c) => drawCape(c, c.dataset.tex));
+  el.querySelectorAll('canvas[data-ov]').forEach(async (c) => {
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+    const [b, o] = await Promise.all([imgOf(pr && pr.skin), imgOf(c.dataset.ov)]);
+    const [sx, sy, w, h, ox, oy] = c.dataset.k === 'body' ? [20, 20, 8, 12, 20, 36] : [8, 8, 8, 8, 40, 8];
+    if (b) x.drawImage(b, sx, sy, w, h, 0, 0, c.width, c.height);
+    if (o) x.drawImage(o, ox, oy, w, h, 0, 0, c.width, c.height);
+  });
+}
+$('#wrSlots').addEventListener('click', async (e) => {
+  const off = e.target.closest('[data-off]');
+  if (off) {
+    e.stopPropagation(); off.closest('.slot').disabled = true;
+    const v = off.dataset.off, r = v === 'cape' ? await cr.equip('cape', 0) : await cr.equip('overlay', +v.slice(3), false);
+    if (!r.ok) { renderSlots(); return toast(r.error || 'Could not take it off.'); }
+    if (state.me) state.me.profile = r.profile;
+    toast('Taken off.'); renderCapes(); renderCosmetics(); return;
+  }
+  const b = e.target.closest('[data-go]'); if (!b) return;
+  if (b.dataset.go === 'cos' && SLOT[b.dataset.key]) { cosUi.slot = b.dataset.key; renderCosmetics(); }
+  wrTab(b.dataset.go);
+});
+
+/* ---------- skin: drop a file, copy from a Minecraft name, arm style, your last skins ---------- */
+async function skinDone(r, msg) {
+  if (!r || r.canceled) return false;
+  if (!r.ok) { toast(r.error || 'Could not save the skin.'); return false; }
+  toast(msg || 'Skin saved. It shows next time you start the game.');
+  await loadMe(); renderAccount(); return true;
+}
+async function skinBusy(fn) { const d = $('#skinDrop'); d.classList.add('busy'); try { return await fn(); } finally { d.classList.remove('busy'); } }
+const drop = $('#skinDrop');
+['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragleave' && drop.contains(e.relatedTarget)) return; drop.classList.remove('over'); }));
+drop.addEventListener('drop', async (e) => {
+  const f = e.dataTransfer && e.dataTransfer.files[0]; if (!f) return;
+  if (!/\.png$/i.test(f.name) && f.type !== 'image/png') return toast('That is not a PNG file. Skins are PNG pictures.');
+  if (f.size > 512 * 1024) return toast('That file is too big for a skin.');
+  const buf = new Uint8Array(await f.arrayBuffer());
+  await skinBusy(async () => skinDone(await cr.skinData(buf, $('#skinSlim').checked)));
+});
+// stop files dropped elsewhere from opening in the window
+['dragover', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => { if (!drop.contains(e.target)) e.preventDefault(); }));
+$('#skinNameForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const n = $('#skinNameQ').value.trim();
+  if (!/^[A-Za-z0-9_]{3,16}$/.test(n)) return toast('Type a Minecraft name: 3 to 16 letters, numbers or _.');
+  $('#skinNameBtn').disabled = true;
+  const r = await skinBusy(() => cr.skinFromName(n));
+  $('#skinNameBtn').disabled = false;
+  if (await skinDone(r, `You now wear the skin of ${n}.`)) $('#skinNameQ').value = '';
+});
+$('#armSeg').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-slim]'); if (!b || b.classList.contains('on')) return;
+  const slim = b.dataset.slim === '1';
+  $$('#armSeg button').forEach((x) => x.classList.toggle('on', x === b)); $('#skinSlim').checked = slim;
+  const r = await skinBusy(() => cr.skinArms(slim));
+  if (r && r.ok) return skinDone(r, slim ? 'Slim arms on.' : 'Classic arms on.');
+  if (r && r.none) return toast('Saved for your next skin. Upload one, or pick one of your skins, to change the arms now.');
+  toast((r && r.error) || 'Could not change the arms.');
+});
+async function renderSkinHist() {
+  const el = $('#skinHist'); if (!el || !cr.skins) return;
+  const r = await cr.skins('list');
+  const list = r && r.ok ? r.list : [];
+  el.innerHTML = list.length ? list.map((s) => `<button data-skin="${esc(s.id)}" class="${s.current ? 'on' : ''}" title="${s.current ? 'In use' : 'Wear this skin'}"><img alt="" data-src="${esc(s.data)}"><span class="x" data-skin-del="${esc(s.id)}" title="Remove from this list" aria-label="Remove">×</span></button>`).join('')
+    : '<p class="hist-none">Skins you upload or copy show up here.</p>';
+  el.querySelectorAll('img[data-src]').forEach((i) => drawHead(i, i.dataset.src));
+}
+$('#skinHist').addEventListener('click', async (e) => {
+  const d = e.target.closest('[data-skin-del]');
+  if (d) { e.stopPropagation(); await cr.skins('remove', d.dataset.skinDel); return renderSkinHist(); }
+  const b = e.target.closest('[data-skin]'); if (!b || b.classList.contains('on')) return;
+  await skinBusy(async () => skinDone(await cr.skins('use', b.dataset.skin)));
+});
+
 /* wardrobe (Premium) */
 async function loadWardrobe() {
   const box = $('#prWard');
@@ -311,6 +437,7 @@ async function loadWardrobe() {
 }
 function renderWardrobe(list) {
   const capes = new Map(capeUi.items.map((c) => [c.id, c]));
+  $('#nOut').textContent = list.length || '';
   $('#wardList').innerHTML = list.length ? list.map((o) => `<div class="outfit"><canvas class="o-skin" width="48" height="96" data-skin="${esc(o.skin || '')}" data-slim="${o.slim ? 1 : 0}"></canvas>${o.cape_item && capes.get(o.cape_item) ? `<canvas class="o-cape" width="30" height="48" data-tex="${esc(capes.get(o.cape_item).texture)}"></canvas>` : ''}
     <b>${esc(o.name)}</b><div class="o-btns"><button class="btn plain sm" data-wear="${o.id}">Wear</button><button class="btn plain sm" data-del="${o.id}" title="Delete">×</button></div></div>`).join('')
     : '<p class="hint">No outfits yet. Put on a skin and a cape, then save the look.</p>';
@@ -390,7 +517,9 @@ async function loadCapes() {
   const r = await cr.store();
   capeUi.items = r && r.ok ? (r.items || []).filter((it) => it.kind === 'cape' && (it.owned || it.premium)) : [];
   $('#prCapes').hidden = !capeUi.items.length;
-  if (!capeUi.items.length) return;
+  $('#nCapes').textContent = capeUi.items.length || '';
+  syncTabs();
+  if (!capeUi.items.length) { renderSlots(); updateView(); return; }
   const cats = {};
   capeUi.items.forEach((it) => { if (it.premium) return; const c = it.category || 'Other'; cats[c] = (cats[c] || 0) + 1; });
   if (capeUi.cat !== 'All' && capeUi.cat !== 'Premium' && !cats[capeUi.cat]) capeUi.cat = 'All';
@@ -410,6 +539,7 @@ function renderCapes() {
     : '<p class="hint capes-none">No capes match your search.</p>';
   $('#capeList').querySelectorAll('canvas[data-tex]').forEach((cv) => capeIo ? capeIo.observe(cv) : drawCape(cv, cv.dataset.tex));
   $('#capeHint').hidden = !!pr;
+  renderSlots(); updateView();
 }
 $('#capeCats').addEventListener('click', (e) => {
   const b = e.target.closest('[data-cat]'); if (!b) return;
@@ -433,7 +563,7 @@ $('#prCapes').addEventListener('click', async (e) => {
   renderCapes();
 });
 /* ---------- cosmetics painted onto the skin (Admin → Launcher, kind "overlay") ---------- */
-const cosUi = { items: [] };
+const cosUi = { items: [], slot: 'all', q: '' };
 const SLOT = { face: 'Face', head: 'Head', body: 'Body' };
 function imgOf(src) { return new Promise((ok) => { if (!src) return ok(null); const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; }); }
 /** The head's front: the player's face with the cosmetic's outer layer on top. */
@@ -447,18 +577,28 @@ async function loadCosmetics() {
   const r = await cr.store();
   cosUi.items = r && r.ok ? (r.items || []).filter((it) => it.kind === 'overlay' && (it.owned || it.premium)) : [];
   $('#prCos').hidden = !cosUi.items.length;
+  $('#nCos').textContent = cosUi.items.length || '';
+  syncTabs();
   renderCosmetics();
 }
 function renderCosmetics() {
-  if (!cosUi.items.length) return;
+  if (!cosUi.items.length) { renderSlots(); updateView(); return; }
   const pr = state.me && state.me.profile, worn = (pr && pr.overlays) || [];
-  const order = Object.keys(SLOT);
-  const list = cosUi.items.slice().sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot) || a.name.localeCompare(b.name));
-  $('#cosList').innerHTML = list.map((it) => `<button class="cape cos${worn.includes(it.id) ? ' on' : ''}${it.premium ? ' prem' : ''}${it.owned ? '' : ' lock'}" data-cos="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
-    ${it.preview ? `<img class="cos-card" src="${esc(it.preview)}" alt="${esc(it.name)}" loading="lazy" draggable="false">` : `<canvas width="64" height="64" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b>`}<small>${worn.includes(it.id) ? 'Wearing · click to take off' : it.owned ? esc(SLOT[it.slot] || 'Cosmetic') : 'Premium'}</small></button>`).join('');
+  const order = Object.keys(SLOT), q = cosUi.q.trim().toLowerCase();
+  const n = (f) => cosUi.items.filter(f).length;
+  const cats = [['all', 'All', cosUi.items.length], ...order.map((k) => [k, SLOT[k], n((it) => it.slot === k)]).filter((c) => c[2]), ['premium', 'Premium', n((it) => it.premium)]].filter((c) => c[2]);
+  if (!cats.some((c) => c[0] === cosUi.slot)) cosUi.slot = 'all';
+  $('#cosCats').innerHTML = cats.map(([k, l, c]) => `<button class="${k === cosUi.slot ? 'on' : ''}${k === 'premium' ? ' prem' : ''}" data-slot="${k}">${l} <em>${c}</em></button>`).join('');
+  const list = cosUi.items.filter((it) => (cosUi.slot === 'all' || (cosUi.slot === 'premium' ? it.premium : it.slot === cosUi.slot)) && (!q || it.name.toLowerCase().includes(q)))
+    .sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot) || a.name.localeCompare(b.name));
+  $('#cosList').innerHTML = !list.length ? '<p class="hint capes-none">No cosmetics match your search.</p>' : list.map((it) => `<button class="cape cos${worn.includes(it.id) ? ' on' : ''}${it.premium ? ' prem' : ''}${it.owned ? '' : ' lock'}" data-cos="${it.id}" title="${esc(it.about || it.name)}"${pr ? '' : ' disabled'}>
+    ${it.preview ? `<img class="cos-card" src="${esc(it.preview)}" alt="${esc(it.name)}" loading="lazy" draggable="false">` : `<canvas width="64" height="64" data-tex="${esc(it.texture)}"></canvas><b>${esc(it.name)}</b>`}<small>${worn.includes(it.id) ? 'Wearing, click to take off' : it.owned ? esc(SLOT[it.slot] || 'Cosmetic') : 'Premium'}</small></button>`).join('');
   $('#cosList').querySelectorAll('canvas[data-tex]').forEach((cv) => drawCos(cv, cv.dataset.tex, pr && pr.skin));
   $('#cosHint').hidden = !!pr;
+  renderSlots(); updateView();
 }
+$('#cosCats').addEventListener('click', (e) => { const b = e.target.closest('[data-slot]'); if (!b) return; cosUi.slot = b.dataset.slot; renderCosmetics(); });
+$('#cosQ').addEventListener('input', (e) => { cosUi.q = e.target.value; renderCosmetics(); });
 $('#prCos').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-cos]'); if (!b || b.disabled) return;
   const id = +b.dataset.cos, pr = state.me && state.me.profile;
@@ -484,8 +624,8 @@ $('#signin').addEventListener('submit', async (e) => {
 });
 $('#siReg').addEventListener('click', async (e) => { e.preventDefault(); const c = await cr.config(); cr.open(c.register || 'https://craftrank.org/register'); });
 $('#prNameSave').addEventListener('click', async () => { const r = await cr.setName($('#prName').value.trim()); if (!r.ok) return toast(r.error); toast('Name saved.'); await loadMe(); renderAccount(); });
-$('#skinUp').addEventListener('click', async () => { const r = await cr.uploadSkin($('#skinSlim').checked); if (r.canceled) return; if (!r.ok) return toast(r.error); toast('Skin saved. It shows next time you start the game.'); await loadMe(); renderAccount(); });
-$('#skinReset').addEventListener('click', async () => { const r = await cr.resetSkin(); if (!r.ok) return toast(r.error); await loadMe(); renderAccount(); });
+$('#skinUp').addEventListener('click', async (e) => { e.stopPropagation(); skinDone(await cr.uploadSkin($('#skinSlim').checked)); });
+$('#skinReset').addEventListener('click', async (e) => { e.preventDefault(); const r = await cr.resetSkin(); if (!r.ok) return toast(r.error); toast('Back to the default skin.'); await loadMe(); renderAccount(); });
 $('#prLogout').addEventListener('click', async () => { await cr.logout(); state.me = null; await loadMe(); renderAccount(); });
 
 /* ---------- my servers ---------- */

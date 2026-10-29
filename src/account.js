@@ -80,6 +80,12 @@ module.exports = function makeAccount(base, file, version, installId) {
       if (slim) fd.append('slim', '1');
       return call('skin', { form: fd });
     },
+    uploadSkinBytes(buf, slim) {
+      const fd = new FormData();
+      fd.append('skin', new Blob([buf], { type: 'image/png' }), 'skin.png');
+      if (slim) fd.append('slim', '1');
+      return call('skin', { form: fd });
+    },
     resetSkin() { const fd = new FormData(); fd.append('reset', '1'); return call('skin', { form: fd }); },
     store: () => call('store'),
     equip: (kind, item, on = true) => call('equip', { json: { kind, item, on } }),

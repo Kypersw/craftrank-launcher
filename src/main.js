@@ -275,12 +275,93 @@ ipcMain.handle('acct:me', async () => {
 ipcMain.handle('acct:login', (e, l, p) => account.login(String(l || ''), String(p || '')));
 ipcMain.handle('acct:logout', async () => { writeCache('me', null); return account.logout(); });
 ipcMain.handle('acct:name', (e, n) => account.setName(String(n || '')));
+/* skins: from a file, dropped in, copied from a Minecraft name; the last few are kept here to switch back */
+const SKINS = path.join(app.getPath('userData'), 'skins');
+function pngSize(b) {   // a skin is a 64×64 or 64×32 PNG
+  if (!Buffer.isBuffer(b) || b.length < 33 || b.length > 512 * 1024 || b.readUInt32BE(0) !== 0x89504e47 || b.toString('ascii', 12, 16) !== 'IHDR') return null;
+  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+}
+const isSkin = (b) => { const s = pngSize(b); return !!s && s.w === 64 && (s.h === 64 || s.h === 32); };
+function skinIndex() { try { const j = JSON.parse(fs.readFileSync(path.join(SKINS, 'index.json'), 'utf8')); return Array.isArray(j.list) ? j : { list: [], current: '' }; } catch (e) { return { list: [], current: '' }; } }
+function skinIndexSave(j) { fs.mkdirSync(SKINS, { recursive: true }); fs.writeFileSync(path.join(SKINS, 'index.json'), JSON.stringify(j)); }
+function skinKeep(buf, slim) {
+  try {
+    const id = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16), j = skinIndex();
+    fs.mkdirSync(SKINS, { recursive: true }); fs.writeFileSync(path.join(SKINS, id + '.png'), buf);
+    j.list = [{ id, slim: !!slim, at: Date.now() }, ...j.list.filter((s) => s.id !== id)];
+    j.list.slice(12).forEach((s) => { try { fs.unlinkSync(path.join(SKINS, s.id + '.png')); } catch (e) {} });
+    j.list = j.list.slice(0, 12); j.current = id; skinIndexSave(j);
+  } catch (e) {}
+}
+async function skinUpload(buf, slim) {
+  if (!isSkin(buf)) return { ok: false, error: 'That is not a Minecraft skin: it has to be a 64×64 or 64×32 PNG.' };
+  const r = await account.uploadSkinBytes(buf, !!slim);
+  if (r.ok) skinKeep(buf, slim);
+  return r;
+}
+async function getBuf(url, max) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) { const e = new Error('http ' + r.status); e.status = r.status; throw e; }
+  const b = Buffer.from(await r.arrayBuffer());
+  if (b.length > max) throw new Error('too big');
+  return b;
+}
 ipcMain.handle('acct:skin', safe(async (e, slim) => {
   const r = await dialog.showOpenDialog(win, { title: 'Choose a skin', filters: [{ name: 'Skin (PNG)', extensions: ['png'] }], properties: ['openFile'] });
   if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-  return account.uploadSkin(r.filePaths[0], !!slim);
+  return skinUpload(fs.readFileSync(r.filePaths[0]), slim);
 }));
-ipcMain.handle('acct:skinReset', () => account.resetSkin());
+ipcMain.handle('acct:skinData', safe(async (e, data, slim) => skinUpload(Buffer.from(data || []), slim)));
+ipcMain.handle('acct:skinFromName', safe(async (e, name) => {
+  name = String(name || '');
+  if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) return { ok: false, error: 'Type a Minecraft name: 3 to 16 letters, numbers or _.' };
+  let id;
+  try { id = JSON.parse((await getBuf('https://api.mojang.com/users/profiles/minecraft/' + name, 65536)).toString()).id; } catch (er) { if (er.status === 404 || er.status === 204) return { ok: false, error: 'No Minecraft player is called ' + name + '.' }; }
+  if (!id) return { ok: false, error: 'No Minecraft player is called ' + name + '. Check the spelling.' };
+  let tex;
+  try {
+    const p = JSON.parse((await getBuf('https://sessionserver.mojang.com/session/minecraft/profile/' + id, 65536)).toString());
+    tex = JSON.parse(Buffer.from((p.properties || []).find((x) => x.name === 'textures').value, 'base64').toString()).textures.SKIN;
+  } catch (er) { return { ok: false, error: 'Could not reach Minecraft to get the skin. Try again in a minute.' }; }
+  if (!tex || !/^https?:\/\/textures\.minecraft\.net\/texture\/[0-9a-f]+$/.test(tex.url)) return { ok: false, error: name + ' uses the default skin, there is nothing to copy.' };
+  const buf = await getBuf(tex.url.replace(/^http:/, 'https:'), 512 * 1024);
+  return skinUpload(buf, !!(tex.metadata && tex.metadata.model === 'slim'));
+}));
+ipcMain.handle('acct:skinArms', safe(async (e, slim) => {   // the arms belong to the skin file, so the current one goes up again
+  const j = skinIndex(), cur = j.list.find((s) => s.id === j.current);
+  if (!cur) return { ok: false, none: true };
+  const r = await account.uploadSkinBytes(fs.readFileSync(path.join(SKINS, cur.id + '.png')), !!slim);
+  if (r.ok) { cur.slim = !!slim; skinIndexSave(j); }
+  return r;
+}));
+ipcMain.handle('skins', safe(async (e, act, id) => {
+  const j = skinIndex(); id = String(id || '');
+  if (act === 'list') {
+    const me = await account.me().catch(() => null);   // a skin changed elsewhere (site, other PC) is not "in use" any more
+    const list = j.list.map((s) => { try { return { id: s.id, slim: s.slim, current: s.id === j.current, data: 'data:image/png;base64,' + fs.readFileSync(path.join(SKINS, s.id + '.png')).toString('base64') }; } catch (er) { return null; } }).filter(Boolean);
+    if (me && me.ok && !(me.profile && me.profile.skin)) list.forEach((s) => { s.current = false; });
+    return { ok: true, list };
+  }
+  const s = j.list.find((x) => x.id === id); if (!s) return { ok: false, error: 'That skin is gone.' };
+  if (act === 'remove') { j.list = j.list.filter((x) => x !== s); if (j.current === id) j.current = ''; try { fs.unlinkSync(path.join(SKINS, id + '.png')); } catch (er) {} skinIndexSave(j); return { ok: true }; }
+  if (act === 'use') return skinUpload(fs.readFileSync(path.join(SKINS, id + '.png')), s.slim);
+  return { ok: false };
+}));
+ipcMain.handle('acct:skinReset', async () => { const r = await account.resetSkin(); if (r.ok) { const j = skinIndex(); j.current = ''; skinIndexSave(j); } return r; });
+/* pictures for the 3D view: only from CraftRank and Minecraft, as data the page may draw with WebGL */
+const texMem = new Map();
+ipcMain.handle('tex', safe(async (e, url) => {
+  let u; try { u = new URL(String(url)); } catch (er) { return null; }
+  const host = u.hostname.replace(/^www\./, ''), site = new URL(SITE).hostname.replace(/^www\./, '');
+  if (!['https:', 'http:'].includes(u.protocol) || (host !== site && host !== 'textures.minecraft.net')) return null;
+  if (texMem.has(u.href)) return texMem.get(u.href);
+  const b = await getBuf(u.href, 12 * 1024 * 1024);
+  if (!pngSize(b)) return null;
+  const d = 'data:image/png;base64,' + b.toString('base64');
+  if (texMem.size > 60) texMem.delete(texMem.keys().next().value);
+  texMem.set(u.href, d);
+  return d;
+}));
 ipcMain.handle('store', () => account.store());
 ipcMain.handle('store:equip', (e, kind, id, on) => account.equip(['skin', 'overlay'].includes(kind) ? kind : 'cape', id ? +id : 0, on !== false));
 /* CraftRank Premium: the payment page (Creem) opens in the browser */

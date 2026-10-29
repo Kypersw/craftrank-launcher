@@ -3,7 +3,7 @@ const inv = (ch) => (...a) => ipcRenderer.invoke(ch, ...a);
 contextBridge.exposeInMainWorld('cr', {
   win: inv('win'), open: inv('open'), settings: inv('settings:get'), save: inv('settings:set'), folder: inv('folder'), info: inv('info'),
   feed: inv('feed'), config: inv('config'),
-  me: inv('acct:me'), login: inv('acct:login'), logout: inv('acct:logout'), setName: inv('acct:name'), uploadSkin: inv('acct:skin'), resetSkin: inv('acct:skinReset'),
+  me: inv('acct:me'), login: inv('acct:login'), logout: inv('acct:logout'), setName: inv('acct:name'), uploadSkin: inv('acct:skin'), resetSkin: inv('acct:skinReset'), skinData: inv('acct:skinData'), skinFromName: inv('acct:skinFromName'), skinArms: inv('acct:skinArms'), skins: inv('skins'), tex: inv('tex'),
   store: inv('store'), equip: inv('store:equip'), premium: inv('premium'), premiumBuy: inv('premium:buy'), wardrobe: inv('wardrobe'), boost: inv('boost:info'),
   update: inv('update:run'), versions: inv('versions'), catalog: inv('catalog'), news: inv('news'), bootCache: inv('boot:cache'), boot: (p, t) => ipcRenderer.send('boot', p, t), loaderVersions: inv('loaderVersions'), play: inv('play'),
   packs: { search: inv('packs:search'), install: inv('packs:install'), remove: inv('packs:remove'), folder: inv('packs:folder') },

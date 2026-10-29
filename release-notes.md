@@ -1,1 +1,1 @@
-Cosmetic cards now look like item tooltips in the game, with the name in gold for Premium ones.
+A new Wardrobe on the Account page. Your character stands in 3D with its skin, cape and cosmetics, and you can turn it with the mouse. Skin, capes, cosmetics and outfits each have their own tab, and you take things off right under the character. Drop a skin file in, or copy the skin of any Minecraft player by name; your last skins stay there to switch back with one click.

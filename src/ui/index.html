@@ -129,38 +129,75 @@
           <p class="hint">No account? <a href="#" id="siReg">Create one on craftrank.org</a></p>
         </form>
         <div class="profile" id="profile" hidden>
-          <div class="box pr-skin">
-            <canvas id="skinCanvas" width="160" height="320"></canvas>
-            <div class="row-btns"><button class="btn blue" id="skinUp">Upload skin</button><button class="btn plain" id="skinReset">Default</button></div>
-            <label class="chk"><input type="checkbox" id="skinSlim"><span>Slim arms (Alex)</span></label>
-          </div>
-          <div class="box pr-info">
-            <h1>Skin and profile</h1>
-            <p class="hint">Signed in as <b id="prUser"></b></p>
-            <label class="fld"><span>In-game name <em>3–16 letters, numbers or _</em></span><div class="inl"><input id="prName" maxlength="16" spellcheck="false"><button class="btn plain" id="prNameSave">Save</button></div></label>
-            <p class="hint">Turn on “CraftRank account” under your name at the bottom to play with this name and skin.</p>
-            <div class="row-btns"><button class="btn plain" id="prLogout">Sign out</button></div>
+          <div class="box pr-bar">
+            <div class="pb-who"><h1>Wardrobe</h1><p class="hint">Signed in as <b id="prUser"></b>. Changes show the next time you start the game.</p></div>
+            <label class="fld pb-name"><span>In-game name <em>3–16 letters, numbers or _</em></span><div class="inl"><input id="prName" maxlength="16" spellcheck="false"><button class="btn plain" id="prNameSave">Save</button></div></label>
+            <button class="btn plain" id="prLogout">Sign out</button>
           </div>
           <div class="box pr-prem" id="prPrem" hidden>
             <div class="pp-l"><i class="crown big"></i><div><h3 id="ppTitle">CraftRank Premium</h3><p class="hint" id="ppText"></p></div></div>
             <div class="pp-r" id="ppBuy"></div>
           </div>
-          <div class="box pr-ward" id="prWard" hidden>
-            <div class="pc-h"><h3>Wardrobe</h3><p class="hint">Save your skin and cape as an outfit and switch with one click.</p></div>
-            <form class="inl ward-new" id="wardNew"><input id="wardName" maxlength="40" placeholder="Outfit name, for example PvP" spellcheck="false"><button class="btn blue">Save current look</button></form>
-            <div class="ward" id="wardList"></div>
-          </div>
-          <div class="box pr-capes" id="prCapes" hidden>
-            <div class="pc-h"><h3>Capes</h3><p class="hint">Click a cape to wear it: it shows in game, and other players with this launcher see it too. Gold ones are for Premium members.</p></div>
-            <div class="cape-bar"><span class="cape-now" id="capeNow"></span><label class="search cape-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="capeQ" placeholder="Search capes" spellcheck="false" aria-label="Search capes"></label></div>
-            <div class="cape-cats" id="capeCats" role="group" aria-label="Cape categories"></div>
-            <p class="hint" id="capeHint" hidden>Save an in-game name above to wear a cape.</p>
-            <div class="capes" id="capeList"></div>
-          </div>
-          <div class="box pr-capes" id="prCos" hidden>
-            <div class="pc-h"><h3>Cosmetics</h3><p class="hint">Glasses, masks, bandanas and more, drawn onto your skin: everyone sees them, on every version. One per slot (face, head, body). Gold ones are for Premium members.</p></div>
-            <p class="hint" id="cosHint" hidden>Save an in-game name above to wear cosmetics.</p>
-            <div class="capes cos-list" id="cosList"></div>
+          <div class="wr">
+            <div class="wr-left">
+              <div class="wr-stage">
+                <canvas id="wrView" aria-label="Your character. Drag to turn it."></canvas>
+                <span class="wr-tip">Drag to turn</span>
+                <div class="seg wr-face" role="group" aria-label="View"><button class="on" data-face="front">Front</button><button data-face="back">Back</button></div>
+              </div>
+              <h4 class="wr-h">Wearing now</h4>
+              <div class="wr-slots" id="wrSlots"></div>
+            </div>
+            <div class="wr-right">
+              <div class="wr-top">
+                <div class="wr-tabs" role="tablist" id="wrTabs">
+                  <button role="tab" data-tab="skin" class="on">Skin</button>
+                  <button role="tab" data-tab="capes">Capes <em id="nCapes"></em></button>
+                  <button role="tab" data-tab="cos">Cosmetics <em id="nCos"></em></button>
+                  <button role="tab" data-tab="outfits">Outfits <em id="nOut"></em></button>
+                </div>
+                <button class="btn blue" id="wrSave">Save as outfit</button>
+              </div>
+
+              <div class="wr-pane on" data-pane="skin" id="prSkin">
+                <div class="drop" id="skinDrop" tabindex="0">
+                  <svg viewBox="0 0 28 28" aria-hidden="true"><path d="M14 21V4M6.5 11 14 3.5l7.5 7.5M3.5 24.5h21"/></svg>
+                  <b>Drop your skin file here</b>
+                  <span class="hint">A 64×64 or 64×32 PNG, the same file you would use in Minecraft.</span>
+                  <button class="btn plain" id="skinUp">Choose file</button>
+                </div>
+                <div class="skin-row">
+                  <form class="fld" id="skinNameForm"><span>Copy a skin from a Minecraft name</span><div class="inl"><input id="skinNameQ" maxlength="16" spellcheck="false" placeholder="For example Dream"><button class="btn plain" id="skinNameBtn">Get skin</button></div></form>
+                  <div class="fld"><span>Arm style</span><div class="seg wide" id="armSeg" role="group" aria-label="Arm style"><button data-slim="0">Classic</button><button data-slim="1">Slim</button></div>
+                    <input type="checkbox" id="skinSlim" hidden></div>
+                </div>
+                <div class="skin-hist">
+                  <h4 class="wr-h">Your skins <span class="hint">Click one to switch back to it.</span></h4>
+                  <div class="hist" id="skinHist"></div>
+                </div>
+                <a href="#" class="lnk" id="skinReset">Back to the default skin</a>
+              </div>
+
+              <div class="wr-pane" data-pane="capes" id="prCapes">
+                <div class="cape-bar"><span class="cape-now" id="capeNow"></span><label class="search cape-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="capeQ" placeholder="Search capes" spellcheck="false" aria-label="Search capes"></label></div>
+                <div class="cape-cats" id="capeCats" role="group" aria-label="Cape categories"></div>
+                <p class="hint" id="capeHint" hidden>Save an in-game name above to wear a cape.</p>
+                <div class="capes" id="capeList"></div>
+              </div>
+
+              <div class="wr-pane" data-pane="cos" id="prCos">
+                <div class="cape-bar"><div class="cape-cats" id="cosCats" role="group" aria-label="Cosmetic slots"></div><label class="search cape-q"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="cosQ" placeholder="Search cosmetics" spellcheck="false" aria-label="Search cosmetics"></label></div>
+                <p class="hint">Drawn onto your skin, so everyone sees them on every version. One per slot: face, head and body.</p>
+                <p class="hint" id="cosHint" hidden>Save an in-game name above to wear cosmetics.</p>
+                <div class="capes cos-list" id="cosList"></div>
+              </div>
+
+              <div class="wr-pane" data-pane="outfits" id="prWard">
+                <p class="hint">Save what you wear now (skin and cape) as an outfit and switch with one click.</p>
+                <form class="inl ward-new" id="wardNew"><input id="wardName" maxlength="40" placeholder="Outfit name, for example PvP" spellcheck="false"><button class="btn blue">Save current look</button></form>
+                <div class="ward" id="wardList"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -243,6 +280,7 @@
 <div class="note" id="msg" hidden></div>
 <div class="toast" id="toast" hidden></div>
 <span id="tbVer" hidden></span>
+<script src="viewer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
