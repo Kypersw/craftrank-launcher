@@ -308,14 +308,30 @@ async function forgeLike(name, task, progress) {
 async function ensureJava(root, component, progress) {
   const dir = path.join(root, 'runtime', component);
   const exe = path.join(dir, 'bin', process.platform === 'win32' ? 'javaw.exe' : 'java');
-  if (fs.existsSync(exe)) return exe;
+  const ok = path.join(dir, '.craftrank-ok');
+  // a download cut short leaves a java.exe that Windows can't run (spawn EFTYPE): only a finished, real program counts
+  if (fs.existsSync(exe) && (fs.existsSync(ok) || javaLooksRunnable(exe))) { try { fs.writeFileSync(ok, '1'); } catch (e) {} return exe; }
+  if (fs.existsSync(dir)) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {} }
   progress('Downloading Java', 0);
   const manifest = await fetchJavaRuntimeManifest({ target: component, dispatcher });
   const task = installJavaRuntimeTask(Object.assign({ destination: dir, manifest }, DL));
   const meter = speedMeter();
   await task.startAndWait({ onUpdate() { if (task.total) progress('Downloading Java' + meter(task.progress, task.total), Math.round(task.progress / task.total * 100)); } });
   if (process.platform !== 'win32') try { fs.chmodSync(exe, 0o755); } catch (e) {}
+  if (!javaLooksRunnable(exe)) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {} throw new Error('Java download failed. Check your internet connection and try again.'); }
+  try { fs.writeFileSync(ok, '1'); } catch (e) {}
   return exe;
+}
+/** A real program file: big enough, and the right header for this system (MZ on Windows, ELF on Linux, Mach-O on macOS). */
+function javaLooksRunnable(exe) {
+  try {
+    const st = fs.statSync(exe);
+    if (st.size < 4096) return false;
+    const fd = fs.openSync(exe, 'r'); const b = Buffer.alloc(4); fs.readSync(fd, b, 0, 4, 0); fs.closeSync(fd);
+    if (process.platform === 'win32') return b[0] === 0x4d && b[1] === 0x5a;
+    if (process.platform === 'linux') return b.toString('latin1') === '\x7fELF';
+    return [0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca].includes(b.readUInt32BE(0));
+  } catch (e) { return false; }
 }
 function consoleJava(exe) { return process.platform === 'win32' ? exe.replace(/javaw\.exe$/, 'java.exe') : exe; }
 
@@ -825,7 +841,9 @@ async function start(root, prep, account, opts) {
     for (const d of ['', 'java', 'jna', 'lwjgl', 'netty']) { try { fs.mkdirSync(path.join(nativeRoot, d), { recursive: true }); } catch (e) {} }
     extraJVMArgs.push('-Dorg.lwjgl.librarypath=' + nativeRoot);
   }
-  const proc = await launch({
+  let proc;
+  try {
+    proc = await launch({
     gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id, nativeRoot,
     gameProfile: { name: account.name, id: account.uuid }, accessToken: account.token || account.uuid, userType: account.type || 'mojang',
     maxMemory: opts.memory, minMemory: opts.boost ? Math.floor(opts.memory / 2) : Math.min(1024, opts.memory),
@@ -835,6 +853,15 @@ async function start(root, prep, account, opts) {
     server: opts.server && opts.server.host && !quickPlay ? { ip: opts.server.host, port: opts.server.port || 25565 } : undefined,
     extraMCArgs: opts.server && opts.server.host && quickPlay ? ['--quickPlayMultiplayer', opts.server.host + ':' + (opts.server.port || 25565)] : undefined,
   });
+  } catch (e) {
+    // Java that can't run (damaged download, blocked by antivirus): it is removed so the next Play downloads it again
+    if (/EFTYPE|EACCES|ENOEXEC|UNKNOWN/.test(String(e && (e.code || e.message)))) {
+      const rt = path.dirname(path.dirname(prep.java));
+      if (rt.startsWith(path.join(root, 'runtime'))) { try { fs.rmSync(rt, { recursive: true, force: true }); } catch (er) {} }
+      throw new Error('Java on this PC could not start, so it was removed. Press Play again to download it fresh. If it keeps happening, allow CraftRank in your antivirus.');
+    }
+    throw e;
+  }
   proc.skinsOff = !!opts.skinServer && !agent;
   // CraftBoost: the game gets a bit more CPU time than background apps
   if (opts.boost && proc.pid) { try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL); } catch (e) {} }

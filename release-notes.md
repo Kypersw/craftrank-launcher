@@ -1,1 +1,1 @@
-Accounts with two-step sign-in now ask for the code from your authenticator app when you sign in to the launcher, just like on craftrank.org, so a password alone is no longer enough to open your account here. Recovery codes work too.
+Fixes for games that would not start. If the Java the launcher downloaded was damaged (for example after a cut-off download or an antivirus), the launcher now notices, removes it and downloads it again instead of failing with "spawn EFTYPE". Connection problems now show a clear message instead of technical errors.

@@ -114,7 +114,8 @@ function noHome(t) {
 }
 function friendly(err) {
   const m = err && err.message ? err.message : String(err);
-  if (/Download|ECONN|ENOTFOUND|ETIMEDOUT|fetch failed|socket/i.test((err && err.name) + ' ' + m)) return 'Download failed. Check your internet connection and try again; finished files are kept.';
+  if (/Download|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|fetch failed|socket|AggregateError|Connect Timeout|UND_ERR|other side closed/i.test((err && err.name) + ' ' + m)) return 'Download failed. Check your internet connection and try again; finished files are kept.';
+  if (/install java runtime|java-runtime/i.test(m)) return 'Java could not be downloaded from Mojang right now. Check your connection and press Play again.';
   if (/ENOSPC/.test(m)) return 'Your disk is full. Free some space and try again.';
   return m;
 }
