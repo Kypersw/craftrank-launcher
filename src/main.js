@@ -106,6 +106,12 @@ const progress = (stage, pct) => {
   send('progress', { stage, pct: barNow });
 };
 
+// error text that leaves the computer (stats) never carries the user's folder, which holds their account name
+function noHome(t) {
+  let out = String(t);
+  for (const h of [os.homedir(), process.env.USERPROFILE, process.env.HOME].filter((x) => x && x.length > 2)) out = out.split(h).join('~').split(h.replace(/\\/g, '/')).join('~');
+  return out.replace(/([A-Za-z]:)?[\\/](Users|home|Documents and Settings)[\\/][^\\/'"]+/gi, '~');
+}
 function friendly(err) {
   const m = err && err.message ? err.message : String(err);
   if (/Download|ECONN|ENOTFOUND|ETIMEDOUT|fetch failed|socket/i.test((err && err.name) + ' ' + m)) return 'Download failed. Check your internet connection and try again; finished files are kept.';
@@ -477,7 +483,7 @@ ipcMain.handle('play', async (e, opts) => {
     return { ok: true };
   } catch (err) {
     console.error(err);
-    stat({ type: 'fail', sid: crypto.randomBytes(8).toString('hex'), mc: String(opts.mc || s.mc || ''), loader: String(opts.loader || s.loader || 'vanilla'), error: String(friendly(err)).slice(0, 80) });
+    stat({ type: 'fail', sid: crypto.randomBytes(8).toString('hex'), mc: String(opts.mc || s.mc || ''), loader: String(opts.loader || s.loader || 'vanilla'), error: noHome(friendly(err)).slice(0, 80) });
     return { ok: false, error: friendly(err) };
   } finally {
     busy = false;
