@@ -616,10 +616,12 @@ $('#prCos').addEventListener('click', async (e) => {
 });
 $('#signin').addEventListener('submit', async (e) => {
   e.preventDefault(); $('#siBtn').disabled = true;
-  const r = await cr.login($('#siLogin').value, $('#siPass').value);
+  const r = await cr.login($('#siLogin').value, $('#siPass').value, $('#siCodeRow').hidden ? '' : $('#siCode').value.trim());
   $('#siBtn').disabled = false;
+  // accounts with two-step sign-in: the code from the authenticator app is asked after the password
+  if (!r.ok && r.code === 'totp') { $('#siCodeRow').hidden = false; $('#siCode').focus(); toast(r.error); return; }
   if (!r.ok) { toast(r.error); return; }
-  $('#siPass').value = ''; await loadMe(); renderAccount();
+  $('#siPass').value = ''; $('#siCode').value = ''; $('#siCodeRow').hidden = true; await loadMe(); renderAccount();
   toast(r.profile ? 'Signed in.' : 'Signed in. Now pick your in-game name.');
 });
 $('#siReg').addEventListener('click', async (e) => { e.preventDefault(); const c = await cr.config(); cr.open(c.register || 'https://craftrank.org/register'); });

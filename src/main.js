@@ -278,7 +278,7 @@ ipcMain.handle('acct:me', async () => {
   if (r.ok) writeCache('me', r); else if (r.status === 401 || r.error === 'signed_out') writeCache('me', null);
   return r;
 });
-ipcMain.handle('acct:login', (e, l, p) => account.login(String(l || ''), String(p || '')));
+ipcMain.handle('acct:login', (e, l, p, c) => account.login(String(l || ''), String(p || ''), String(c || '').replace(/[^0-9A-Za-z-]/g, '').slice(0, 16)));
 ipcMain.handle('acct:logout', async () => { writeCache('me', null); return account.logout(); });
 ipcMain.handle('acct:name', (e, n) => account.setName(String(n || '')));
 /* skins: from a file, dropped in, copied from a Minecraft name; the last few are kept here to switch back */

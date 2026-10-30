@@ -1,1 +1,1 @@
-Privacy fix: when a game fails to start, the short error the launcher reports for our statistics no longer includes your user folder, so your Windows account name is never sent.
+Accounts with two-step sign-in now ask for the code from your authenticator app when you sign in to the launcher, just like on craftrank.org, so a password alone is no longer enough to open your account here. Recovery codes work too.

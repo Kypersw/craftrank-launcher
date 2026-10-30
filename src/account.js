@@ -61,7 +61,7 @@ module.exports = function makeAccount(base, file, version, installId) {
     let j = {};
     try { j = await r.json(); } catch (e) {}
     if (r.status === 401) save('');
-    if (!r.ok) return { ok: false, error: j.message || 'Something went wrong (' + r.status + ').', status: r.status };
+    if (!r.ok) return { ok: false, error: j.message || 'Something went wrong (' + r.status + ').', status: r.status, code: typeof j.error === 'string' ? j.error : '' };
     return Object.assign({ ok: true }, j);
   }
 
@@ -70,7 +70,7 @@ module.exports = function makeAccount(base, file, version, installId) {
     config: () => call('config'),
     feed: () => call('feed'),
     event: (j) => call('event', { json: j }),
-    async login(login, password) { const r = await call('login', { json: { login, password } }); if (r.ok) save(r.token); delete r.token; return r; },
+    async login(login, password, code) { const r = await call('login', { json: code ? { login, password, code } : { login, password } }); if (r.ok) save(r.token); delete r.token; return r; },
     async logout() { if (tok()) await call('logout', { json: {} }); save(''); return { ok: true }; },
     me: () => tok() ? call('me') : Promise.resolve({ ok: false, error: 'signed_out' }),
     setName: (name) => call('name', { json: { name } }),
