@@ -37,6 +37,20 @@ input, select { -webkit-user-select: text; user-select: text; }
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 .hero-man { position: absolute; left: 6px; bottom: 16px; z-index: 5; height: 640px; pointer-events: none; filter: drop-shadow(18px 10px 30px rgba(0,0,0,.6)); transition: transform .55s cubic-bezier(.16,1,.3,1), opacity .4s; }
 body:not([data-page="home"]) .hero-man { transform: translateX(-70px); opacity: 0; }
+/* white hat block over the hero (Figma: Launcher: white hat block v2) */
+.wh { position: absolute; left: 172px; top: 42px; z-index: 6; width: 256px; transition: transform .55s cubic-bezier(.16,1,.3,1), opacity .4s; }
+body:not([data-page="home"]) .wh { transform: translateX(-70px); opacity: 0; pointer-events: none; }
+.wh p { margin: 0; }
+.wh-k { color: var(--tx); font: 600 13px Cond, sans-serif; letter-spacing: .17em; text-transform: uppercase; }
+.wh-t { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; color: var(--hi); font: 700 21px/1 Cond, sans-serif; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+.wh-t img { flex: none; }
+.wh-rule { display: block; width: 28px; height: 2px; margin: 9px 0 8px; background: var(--br); }
+.wh-s { color: var(--tx2); font: 500 12.5px Barlow, sans-serif; }
+.wh-p { display: flex; gap: 8px; margin-top: 7px; }
+.wh-b { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border-radius: 2px; background: rgba(19,20,22,.6); box-shadow: inset 0 0 0 1px var(--line2); color: var(--hi); font: 600 14px Cond, sans-serif; letter-spacing: .1em; text-transform: uppercase; text-decoration: none; cursor: pointer; transition: box-shadow .15s; }
+.wh-b:hover { box-shadow: inset 0 0 0 1px #6a6e75; }
+.wh-abuse { padding: 0 1px; }
+.wh-abuse img { display: block; height: 30px; width: auto; }
 
 /* header */
 .top { display: flex; align-items: center; gap: 18px; padding: 24px 22px 0 calc(var(--left) - 30px); -webkit-app-region: drag; transition: padding .45s cubic-bezier(.16,1,.3,1); }

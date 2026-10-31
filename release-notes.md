@@ -1,1 +1,1 @@
-Fixes for games that would not start. If the Java the launcher downloaded was damaged (for example after a cut-off download or an antivirus), the launcher now notices, removes it and downloads it again instead of failing with "spawn EFTYPE". Connection problems now show a clear message instead of technical errors.
+A new "White hat security" block on the Play page: CraftRank guards the open web together with AbuseIPDB and Spamhaus, and the launcher shows it next to your character. Both names open their sites in your browser.
