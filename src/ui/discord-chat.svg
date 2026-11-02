@@ -1,0 +1,10 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="icon">
+<rect width="40" height="40" rx="2" fill="#5865F2"/>
+<rect id="Rectangle" x="10" y="11" width="20" height="15" rx="4" fill="white"/>
+<path id="Polygon" d="M17.5 30L14.4689 25.5H20.5311L17.5 30Z" fill="white"/>
+<circle id="Ellipse" cx="16" cy="18" r="1.5" fill="#5865F2"/>
+<circle id="Ellipse_2" cx="20" cy="18" r="1.5" fill="#5865F2"/>
+<circle id="Ellipse_3" cx="24" cy="18" r="1.5" fill="#5865F2"/>
+</g>
+</svg>

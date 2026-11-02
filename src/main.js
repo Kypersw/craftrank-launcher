@@ -19,7 +19,7 @@ ipcMain.on = (ch, fn) => _on(ch, (e, ...a) => { if (fromUs(e)) fn(e, ...a); });
  * Links that open in the browser: HTTPS only, to CraftRank and the few sites the launcher links to,
  * or an ad link that came with the CraftRank feed (set by the site's admin).
  */
-const LINK_HOSTS = ['craftrank.org', 'github.com', 'modrinth.com', 'aka.ms', 'minecraft.net', 'abuseipdb.com', 'spamhaus.org'];
+const LINK_HOSTS = ['craftrank.org', 'github.com', 'modrinth.com', 'aka.ms', 'minecraft.net', 'discord.gg'];
 let feedLinks = new Set();
 function safeOpen(url) {
   let u; try { u = new URL(String(url)); } catch (e) { return false; }

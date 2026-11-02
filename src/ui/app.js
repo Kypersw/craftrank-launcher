@@ -13,11 +13,6 @@ document.addEventListener('click', (e) => {
   const p = e.target.closest('[data-page]:not(body)'); if (p) { e.preventDefault(); go(p.dataset.page); return; }
   const o = e.target.closest('[data-open]'); if (o) { e.preventDefault(); cr.open(o.dataset.open); }
 });
-// the AbuseIPDB badge comes from their site: offline or blocked, the name is shown instead of a broken image
-$$('.wh-abuse img').forEach((im) => {
-  const fall = () => { const a = im.parentNode; a.classList.remove('wh-abuse'); a.textContent = 'AbuseIPDB'; };
-  if (im.complete && !im.naturalWidth) fall(); else im.addEventListener('error', fall, { once: true });
-});
 function go(page) {
   document.body.dataset.page = page;
   $$('.nav a[data-page]').forEach((a) => a.classList.toggle('on', a.dataset.page === page));

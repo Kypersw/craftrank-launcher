@@ -1,1 +1,1 @@
-A new "White hat security" block on the Play page: CraftRank guards the open web together with AbuseIPDB and Spamhaus, and the launcher shows it next to your character. Both names open their sites in your browser.
+The Play page now has a "Join our Discord" banner next to your character. One click opens the CraftRank Discord for news, events and help.
