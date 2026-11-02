@@ -432,8 +432,19 @@ async function prepare(root, opts, progress) {
   if (vjson) { try { await fetchAssets(root, vjson, (n) => { pre += n; show(pre); }); } catch (e) {} }
   // The installer counts the assets above again as it checks them, so start its count after them.
   const assetBytes = pre;
-  const t = installTask(meta, root, DL);
-  await t.startAndWait({ onUpdate() { show(Math.max(pre, Math.min(want, assetBytes + Math.max(0, (t.progress || 0) - assetBytes)))); } });
+  // a dropped connection mid-way is retried by itself (finished files are kept), so a short network hiccup
+  // does not end in "Download failed" and a second press of Play
+  for (let attempt = 0; ; attempt++) {
+    const t = installTask(meta, root, DL);
+    try {
+      await t.startAndWait({ onUpdate() { show(Math.max(pre, Math.min(want, assetBytes + Math.max(0, (t.progress || 0) - assetBytes)))); } });
+      break;
+    } catch (e) {
+      if (attempt >= 2) throw e;
+      progress('Connection dropped, trying again (' + (attempt + 2) + ' of 3)', 0);
+      await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
+    }
+  }
   const base = await Version.parse(new MinecraftFolder(root), opts.mc);
   const java = await ensureJava(root, (base.javaVersion && base.javaVersion.component) || 'jre-legacy', progress);
   let id = opts.mc, ofJar = null;

@@ -1,1 +1,1 @@
-The Play page now has a "Join our Discord" banner next to your character. One click opens the CraftRank Discord for news, events and help.
+Fewer "Download failed" errors: when the connection drops while Minecraft downloads, the launcher now tries again by itself, keeping the files it already has. When a game closes with an error, the anonymous statistics now include a short reason (for example a mod that does not fit the version), so we can find and fix crashes faster. It never includes your folder or account name, and it is off when statistics are off in Settings.

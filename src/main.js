@@ -112,6 +112,22 @@ function noHome(t) {
   for (const h of [os.homedir(), process.env.USERPROFILE, process.env.HOME].filter((x) => x && x.length > 2)) out = out.split(h).join('~').split(h.replace(/\\/g, '/')).join('~');
   return out.replace(/([A-Za-z]:)?[\\/](Users|home|Documents and Settings)[\\/][^\\/'"]+/gi, '~');
 }
+// why a game closed with an error, in one short line read from what it printed: the mod that does not fit,
+// the exception, or running out of memory. Sent with the anonymous end event so crashes can be fixed.
+function crashReason(log) {
+  const L = String(log || '').split(/\r?\n/).map((x) => x.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, '').trim()).filter(Boolean);
+  const find = (re) => { for (let i = L.length - 1; i >= 0; i--) if (re.test(L[i])) return i; return -1; };
+  let i = find(/Incompatible mods? found|Mod resolution (failed|encountered)/i);
+  if (i > -1) { const next = L.slice(i + 1).find((x) => /^-?\s*Mod '|requires|is incompatible|breaks/i.test(x)); return (next || L[i]).replace(/^-\s*/, ''); }
+  i = find(/OutOfMemoryError|Could not reserve enough space|Invalid maximum heap size/i);
+  if (i > -1) return L[i];
+  i = find(/^Caused by: /);
+  if (i > -1) return L[i].replace(/^Caused by: /, '');
+  i = find(/\b[\w.$]+(Exception|Error)\b/);
+  if (i > -1) return L[i];
+  i = find(/EXCEPTION_ACCESS_VIOLATION|A fatal error has been detected/);
+  return i > -1 ? L[i] : '';
+}
 function friendly(err) {
   const m = err && err.message ? err.message : String(err);
   if (/Download|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|fetch failed|socket|AggregateError|Connect Timeout|UND_ERR|other side closed/i.test((err && err.name) + ' ' + m)) return 'Download failed. Check your internet connection and try again; finished files are kept.';
@@ -479,7 +495,7 @@ ipcMain.handle('play', async (e, opts) => {
     if (running.stdout) running.stdout.on('data', take);
     if (running.stderr) running.stderr.on('data', take);
     running.on('close', () => { if (out) out.end(); });
-    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1 }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
+    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1, error: code ? noHome(crashReason(log)).slice(0, 80) : '' }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
     if (s.closeOnPlay) win.hide();
     return { ok: true };
   } catch (err) {
