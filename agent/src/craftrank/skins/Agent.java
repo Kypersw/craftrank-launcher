@@ -28,6 +28,8 @@ public final class Agent {
         put(GlPatcher.TEX, Anim::tex);
         put(GlPatcher.DEL, Anim::del);
         put(GlPatcher.SWAP, Anim::swap);
+        put(GlPatcher.RP_TEX, Anim::rpTex);
+        put(GlPatcher.RP_FRAME, Anim::rpFrame);
         inst.addTransformer(new Patcher(), false);
         inst.addTransformer(new GlPatcher(), false);
         Log.info("ready, skin server " + root);

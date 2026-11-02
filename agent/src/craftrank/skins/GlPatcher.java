@@ -17,7 +17,8 @@ import java.security.ProtectionDomain;
  * so nearly every texture upload of the game costs only a few integer compares.
  */
 final class GlPatcher implements ClassFileTransformer {
-    static final String TEX = "craftrank.gl.tex", DEL = "craftrank.gl.del", SWAP = "craftrank.gl.swap";
+    static final String TEX = "craftrank.gl.tex", DEL = "craftrank.gl.del", SWAP = "craftrank.gl.swap", RP_TEX = "craftrank.rp.tex", RP_FRAME = "craftrank.rp.frame";
+    static final String RP_ENC = "com/mojang/renderpearl/frontend/FrontendCommandEncoder", MC = "net/minecraft/client/Minecraft";
 
     @Override
     public byte[] transform(ClassLoader loader, String name, Class<?> cls, ProtectionDomain pd, byte[] bytes) {
@@ -25,7 +26,10 @@ final class GlPatcher implements ClassFileTransformer {
         boolean gl = name.equals("org/lwjgl/opengl/GL11") || name.equals("org/lwjgl/opengl/GL11C");
         // Minecraft 26.x shows frames through SDL instead of GLFW
         boolean swap = name.equals("org/lwjgl/glfw/GLFW") || name.equals("org/lwjgl/opengl/Display") || name.equals("org/lwjgl/sdl/SDLVideo");
-        if (!gl && !swap) return null;
+        // Minecraft 26.x draws through its own layer (OpenGL or Vulkan): texture writes and the frame start are
+        // taken there, so animated capes work the same on both
+        boolean rp = name.equals(RP_ENC), mc = name.equals(MC);
+        if (!gl && !swap && !rp && !mc) return null;
         final String owner = name;
         try {
             ClassReader cr = new ClassReader(bytes);
@@ -36,7 +40,11 @@ final class GlPatcher implements ClassFileTransformer {
                 @Override
                 public MethodVisitor visitMethod(int acc, String m, String desc, String sig, String[] ex) {
                     MethodVisitor mv = super.visitMethod(acc, m, desc, sig, ex);
-                    if ((acc & Opcodes.ACC_STATIC) == 0 || (acc & Opcodes.ACC_NATIVE) != 0) return mv;
+                    if ((acc & Opcodes.ACC_NATIVE) != 0) return mv;
+                    if (rp && m.equals("writeToTexture") && (desc.startsWith("(Lcom/mojang/renderpearl/api/textures/GpuTexture;Lcom/mojang/blaze3d/platform/NativeImage;")
+                            || desc.equals("(Lcom/mojang/renderpearl/api/textures/GpuTexture;Ljava/nio/ByteBuffer;IIIIII)V"))) { n[0]++; return new Prologue(mv, 4, owner, desc, frames); }
+                    if (mc && m.equals("runTick") && desc.equals("(Z)V")) { n[0]++; return new Prologue(mv, 5, owner, desc, frames); }
+                    if ((acc & Opcodes.ACC_STATIC) == 0) return mv;
                     int kind = 0;
                     if (gl && m.equals("glTexSubImage2D") && (desc.equals("(IIIIIIIIJ)V") || desc.equals("(IIIIIIIILjava/nio/IntBuffer;)V") || desc.equals("(IIIIIIIILjava/nio/ByteBuffer;)V"))) kind = 1;
                     else if (gl && m.equals("glDeleteTextures") && desc.equals("(I)V")) kind = 2;
@@ -73,7 +81,7 @@ final class GlPatcher implements ClassFileTransformer {
                 mv.visitVarInsn(Opcodes.ILOAD, 4); mv.visitIntInsn(Opcodes.BIPUSH, 64); mv.visitJumpInsn(Opcodes.IF_ICMPLT, skip);
             }
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/System", "getProperties", "()Ljava/util/Properties;", false);
-            mv.visitLdcInsn(kind == 1 ? TEX : kind == 2 ? DEL : SWAP);
+            mv.visitLdcInsn(kind == 1 ? TEX : kind == 2 ? DEL : kind == 4 ? RP_TEX : kind == 5 ? RP_FRAME : SWAP);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/Properties", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", false);
             mv.visitInsn(Opcodes.DUP);
             mv.visitJumpInsn(Opcodes.IFNULL, nul);
@@ -91,6 +99,22 @@ final class GlPatcher implements ClassFileTransformer {
                 else mv.visitVarInsn(Opcodes.ALOAD, 8);
                 mv.visitInsn(Opcodes.AASTORE);
                 mv.visitInsn(Opcodes.DUP); mv.visitIntInsn(Opcodes.BIPUSH, 5); mv.visitLdcInsn(Type.getObjectType(owner)); mv.visitInsn(Opcodes.AASTORE);
+            } else if (kind == 4) {
+                // {encoder, texture, NativeImage or ByteBuffer, the int arguments...}
+                Type[] at = Type.getArgumentTypes(desc);
+                mv.visitIntInsn(Opcodes.BIPUSH, at.length + 1);
+                mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+                mv.visitInsn(Opcodes.DUP); mv.visitInsn(Opcodes.ICONST_0); mv.visitVarInsn(Opcodes.ALOAD, 0); mv.visitInsn(Opcodes.AASTORE);
+                int slot = 1;
+                for (int i = 0; i < at.length; i++) {
+                    mv.visitInsn(Opcodes.DUP); mv.visitIntInsn(Opcodes.BIPUSH, i + 1);
+                    if (at[i].getSort() == Type.INT) { mv.visitVarInsn(Opcodes.ILOAD, slot); mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false); }
+                    else mv.visitVarInsn(Opcodes.ALOAD, slot);
+                    mv.visitInsn(Opcodes.AASTORE);
+                    slot += at[i].getSize();
+                }
+            } else if (kind == 5) {
+                mv.visitVarInsn(Opcodes.ALOAD, 0);
             } else if (kind == 2) {
                 mv.visitVarInsn(Opcodes.ILOAD, 0);
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);

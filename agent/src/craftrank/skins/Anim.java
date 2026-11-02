@@ -118,7 +118,7 @@ final class Anim {
 
     /** glTexSubImage2D at 0,0 level 0 with width = 2 × height: {w, h, format, type, pixels (address or IntBuffer), GL class}. */
     static Object tex(Object o) {
-        if (busy) return null;
+        if (busy || rpMode) return null;
         try {
             Object[] a = (Object[]) o;
             int w = (Integer) a[0], h = (Integer) a[1], fmt = (Integer) a[2], type = (Integer) a[3];
@@ -161,6 +161,112 @@ final class Anim {
         return null;
     }
 
+    /* ---------------- Minecraft 26.x: OpenGL and Vulkan alike ---------------- */
+
+    // Minecraft 26.x writes textures through its own command encoder, whatever the graphics API. Capes are
+    // found and animated there, and the OpenGL hooks above stay out of the way (they would not run on Vulkan).
+    private static volatile boolean rpMode;
+    static final class RpBound { final Object enc, tex; final Strip s; int last = -1; RpBound(Object enc, Object tex, Strip s) { this.enc = enc; this.tex = tex; this.s = s; } }
+    private static final List<RpBound> rpBound = new ArrayList<>();
+    private static final LinkedHashMap<Long, Object[]> rpRecent = new LinkedHashMap<Long, Object[]>(64, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<Long, Object[]> e) { return size() > 96; }
+    };
+    private static final Map<String, Method> rpMethods = new HashMap<>();
+    private static Method rpMethod(Object on, String name, int params) throws Exception {
+        String k = on.getClass().getName() + "#" + name + "/" + params;
+        Method m = rpMethods.get(k);
+        if (m != null) return m;
+        for (Class<?> c = on.getClass(); c != null && m == null; c = c.getSuperclass())
+            for (Method x : c.getMethods()) if (x.getName().equals(name) && x.getParameterCount() == params && (params != 8 || x.getParameterTypes()[1] == ByteBuffer.class)) { m = x; break; }
+        if (m == null) throw new NoSuchMethodException(k);
+        m.setAccessible(true);
+        rpMethods.put(k, m);
+        return m;
+    }
+
+    /** {encoder, GpuTexture, NativeImage or ByteBuffer, int arguments...}: a texture write of the game. */
+    static Object rpTex(Object o) {
+        rpMode = true;
+        if (busy) return null;
+        try {
+            Object[] a = (Object[]) o;
+            Object enc = a[0], tex = a[1], src = a[2];
+            if (tex == null || src == null) return null;
+            int w, h; Px px;
+            if (src instanceof ByteBuffer) {
+                // (texture, pixels, mip level, layer, x, y, width, height)
+                if (a.length < 9 || (Integer) a[3] != 0 || (Integer) a[5] != 0 || (Integer) a[6] != 0) return null;
+                w = (Integer) a[7]; h = (Integer) a[8];
+                ByteBuffer b = (ByteBuffer) src; int pos = b.position();
+                if (w != 2 * h || w < 64 || (long) b.limit() - pos < 4L * w * h) return null;
+                px = i -> { int q = pos + 4 * i; return (b.get(q + 3) & 0xFF) << 24 | (b.get(q) & 0xFF) << 16 | (b.get(q + 1) & 0xFF) << 8 | (b.get(q + 2) & 0xFF); };
+            } else {
+                if (a.length > 3 && a[3] instanceof Integer && (Integer) a[3] != 0) return null;   // a smaller mip level
+                w = (Integer) rpMethod(src, "getWidth", 0).invoke(src); h = (Integer) rpMethod(src, "getHeight", 0).invoke(src);
+                if (w != 2 * h || w < 64) return null;
+                Method gp = rpMethod(src, "getPixel", 2);   // ARGB
+                final int fw = w;
+                px = i -> { try { return (Integer) gp.invoke(src, i % fw, i / fw); } catch (Exception e) { return 0; } };
+            }
+            long fp = fingerprint(w, h, px);
+            if (fp == 0) return null;
+            for (Iterator<RpBound> it = rpBound.iterator(); it.hasNext(); ) { RpBound b = it.next(); if (b.tex == tex && b.s.fp != fp) it.remove(); }
+            Strip s = strips.get(fp);
+            if (s != null && s.w == w) rpAttach(enc, tex, s);
+            else rpRecent.put(fp, new Object[]{enc, tex});
+        } catch (Throwable t) { /* never break the game's upload */ }
+        return null;
+    }
+
+    private static void rpAttach(Object enc, Object tex, Strip s) {
+        for (RpBound b : rpBound) if (b.tex == tex) return;
+        rpBound.add(new RpBound(enc, tex, s));
+        Log.info("animated cape on " + tex.getClass().getSimpleName());
+    }
+
+    // frames as RGBA bytes, the layout of the game's textures (made once per frame, on first use)
+    private static final Map<Strip, ByteBuffer[]> rgba = new HashMap<>();
+    private static ByteBuffer rgbaFrame(Strip s, int f) {
+        ByteBuffer[] fr = rgba.computeIfAbsent(s, k -> new ByteBuffer[k.frames.length]);
+        if (fr[f] == null) {
+            IntBuffer src = s.frames[f];
+            ByteBuffer b = ByteBuffer.allocateDirect(s.w * s.h * 4);
+            for (int i = 0, n = s.w * s.h; i < n; i++) { int c = src.get(i); b.put((byte) (c >> 16)).put((byte) (c >> 8)).put((byte) c).put((byte) (c >>> 24)); }
+            b.flip();
+            fr[f] = b;
+        }
+        return fr[f];
+    }
+
+    /** Start of every frame (Minecraft.runTick): the next cape frames go through the game's own encoder. */
+    static Object rpFrame(Object ignored) {
+        if (!rpMode || !any) return null;
+        try {
+            for (Strip s; (s = ready.poll()) != null; ) {
+                strips.put(s.fp, s);
+                Object[] r = rpRecent.remove(s.fp);
+                if (r != null) rpAttach(r[0], r[1], s);
+                Integer id = recent.remove(s.fp);   // (OpenGL ids are not used on 26.x)
+            }
+            if (rpBound.isEmpty()) return null;
+            long ms = System.nanoTime() / 1_000_000L;
+            busy = true;
+            try {
+                for (Iterator<RpBound> it = rpBound.iterator(); it.hasNext(); ) {
+                    RpBound b = it.next();
+                    if ((Boolean) rpMethod(b.tex, "isClosed", 0).invoke(b.tex)) { it.remove(); continue; }
+                    int f = (int) ((ms * b.s.fps / 1000L) % b.s.frames.length);
+                    if (f == b.last) continue;
+                    b.last = f;
+                    ByteBuffer px = rgbaFrame(b.s, f).duplicate();
+                    rpMethod(b.enc, "writeToTexture", 8).invoke(b.enc, b.tex, px, 0, 0, 0, 0, b.s.w, b.s.h);
+                    if (DEBUG && ++ups % 120 == 1) Log.info("animated cape frame " + f + " written (" + ups + " so far)");
+                }
+            } finally { busy = false; }
+        } catch (Throwable t) { Log.info("animated cape paused: " + t); rpBound.clear(); }
+        return null;
+    }
+
     static Object del(Object o) {
         if (busy || (!any && recent.isEmpty())) return null;
         int id = (Integer) o;
@@ -179,7 +285,7 @@ final class Anim {
             if (fpsSince == 0) fpsSince = now;
             else if (now - fpsSince > 10_000_000_000L) { Log.info(String.format("fps: %.1f", fpsFrames * 1e9 / (now - fpsSince))); fpsFrames = 0; fpsSince = now; }
         }
-        if (!any) return null;
+        if (!any || rpMode) return null;
         try {
             for (Strip s; (s = ready.poll()) != null; ) {
                 strips.put(s.fp, s);
