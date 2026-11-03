@@ -115,12 +115,27 @@ function noHome(t) {
 // why a game closed with an error, in one short line read from what it printed: the mod that does not fit,
 // the exception, or running out of memory. Sent with the anonymous end event so crashes can be fixed.
 function crashReason(log) {
-  const L = String(log || '').split(/\r?\n/).map((x) => x.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, '').trim()).filter(Boolean);
+  // the system details at the end of a crash report are not the cause ("Current Language: ~~ERROR~~ NullPointerException"
+  // is printed whenever the game dies before its language loads), so they are never picked
+  const SYS = /^(Current Language|Profiler Position|Is Modded|Type|Launched Version|LWJGL|OpenGL|GL Caps|Using VBOs|Resource Packs|Pack Format|Vec3 Pool Size|IntCache|Memory|JVM Flags|Java Version|Java VM Version|Operating System|CPU|Minecraft Version|Backend library|Backend API|Window size|GL debug messages|Loaded Shaderpack|OptiFine Version|OptiFine Build|Render Distance|Mipmaps|Anisotropic Filtering|Antialiasing|Multitexture|Shaders|OpenGlVersion|OpenGlRenderer|OpenGlVendor|CpuCount|FML|Loaded coremods|States|Graphics mode|Error|Stacktrace|Thread|Details)\s*:/i;
+  const L = String(log || '').split(/\r?\n/).map((x) => x.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, '').replace(/~~ERROR~~\s*/g, '').trim()).filter((x) => x && !SYS.test(x));
   const find = (re) => { for (let i = L.length - 1; i >= 0; i--) if (re.test(L[i])) return i; return -1; };
+  const first = (re) => L.findIndex((x) => re.test(x));
   let i = find(/Incompatible mods? found|Mod resolution (failed|encountered)/i);
   if (i > -1) { const next = L.slice(i + 1).find((x) => /^-?\s*Mod '|requires|is incompatible|breaks/i.test(x)); return (next || L[i]).replace(/^-\s*/, ''); }
+  // Forge 1.7-1.12: a mod that needs another one, or a newer one
+  i = find(/Missing Mods:|MissingModsException|requires .+ (or above|to be installed)|Duplicate Mods|DuplicateModsFoundException|WrongMinecraftVersionException/i);
+  if (i > -1) return /^(Missing|Duplicate) Mods:$/i.test(L[i]) && L[i + 1] ? L[i] + ' ' + L[i + 1] : L[i];
   i = find(/OutOfMemoryError|Could not reserve enough space|Invalid maximum heap size/i);
   if (i > -1) return L[i];
+  // a crash report: its description and the exception right under it say what happened
+  const d = first(/^Description: /);
+  if (d > -1) {
+    const ex = L.slice(d + 1, d + 6).find((x) => /^[\w.$]+(Exception|Error)\b/.test(x));
+    const cause = L.slice(d + 1).find((x) => /^Caused by: /.test(x));
+    const desc = L[d].replace(/^Description: /, '');
+    return (desc + (ex ? ': ' + ex : '') + (cause && !/^Caused by: java\.lang\.reflect\.InvocationTargetException/.test(cause) ? ' (' + cause.replace(/^Caused by: /, '') + ')' : '')).slice(0, 300);
+  }
   i = find(/^Caused by: /);
   if (i > -1) return L[i].replace(/^Caused by: /, '');
   i = find(/\b[\w.$]+(Exception|Error)\b/);
