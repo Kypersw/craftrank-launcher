@@ -1,1 +1,1 @@
-Animated capes now move on Minecraft 26.x with the Vulkan graphics option too, not only with OpenGL. The Mods page now reminds you that a mod can make the game crash: open its Details page first and check which versions and loader it supports and which mods it needs.
+With Forge + OptiFine selected, the Mods page no longer installs mods that cannot run next to OptiFine (Sodium, Embeddium, Rubidium, Oculus, Iris and their add-ons), also when another mod needs them. You get a clear message instead of a game that crashes at start: pick Forge without OptiFine for those mods.

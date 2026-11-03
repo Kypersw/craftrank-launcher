@@ -699,6 +699,16 @@ async function installMod(root, mc, loader, id, progress) {
       if (by) { have.by = [...new Set((have.by || []).concat(by))]; } else have.dep = false;
       return;
     }
+    // Forge with OptiFine: Sodium and its Forge ports (Embeddium, Rubidium) and the shader mods built on them (Oculus,
+    // Iris) replace the same renderer OptiFine does, so the game crashes at start. Stopped here, before any download.
+    if (loader === 'forge-optifine') {
+      let pj = null; try { pj = await getJson('https://api.modrinth.com/v2/project/' + encodeURIComponent(pid)); } catch (e) {}
+      const slug = String((pj && pj.slug) || pid).toLowerCase(), name = (pj && pj.title) || pid;
+      if (OPTIFINE_CLASH.test(slug)) {
+        const parent = by && st[by] ? st[by].title : '';
+        throw new Error((parent ? parent + ' needs ' + name + ', which' : name) + ' does not work together with OptiFine and would make the game crash. Pick Forge without OptiFine in the version menu, or leave this mod out.');
+      }
+    }
     const v = await modVersion(pid, mc, loaders);
     if (!v) {
       if (!by) throw new Error('This mod is not out for Minecraft ' + mc + ' with ' + loaderName(loader) + ' yet.');
@@ -728,6 +738,8 @@ async function installMod(root, mc, loader, id, progress) {
   const deps = addedIds.filter((k) => k !== id).map((k) => st[k].title);
   return { file: st[id].file, deps };
 }
+/** Mods that replace the renderer like OptiFine does: they cannot run next to it. */
+const OPTIFINE_CLASH = /^(sodium|embeddium|rubidium|magnesium|xenon|oculus|iris|sodium-extra|rubidium-extra|embeddium-extra|reeses-sodium-options|sodium-options|sodium-dynamic-lights|textrues-embeddium-options|chloride)$/;
 function loaderName(l) { return { fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', 'forge-optifine': 'Forge', neoforge: 'NeoForge' }[l] || l; }
 /** Removes a mod, and the mods that only came along for it. */
 function removeMod(root, mc, loader, id) {
