@@ -24,9 +24,9 @@ npm start
 
 ## Contributing
 
-Bug reports and pull requests are welcome. Open an issue first for bigger changes.
+Bug reports are welcome: open an issue. Code changes are made by the CraftRank team only.
 
 ## License
 
-[MIT](LICENSE). Minecraft is a trademark of Mojang AB; this launcher is not affiliated with Mojang or Microsoft.
+All rights reserved, see [LICENSE](LICENSE). The code is public so anyone can check what the launcher does; it may not be copied, changed or republished. Minecraft is a trademark of Mojang AB; this launcher is not affiliated with Mojang or Microsoft.
 OptiFine is downloaded from optifine.net on the player's PC and is not part of this repository.

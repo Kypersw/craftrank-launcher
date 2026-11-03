@@ -1,21 +1,33 @@
-MIT License
+CraftRank Launcher
+Copyright (c) 2026 CraftRank. All rights reserved.
 
-Copyright (c) 2026 CraftRank
+The source code of the CraftRank Launcher is published so that anyone can read it and check
+what the launcher does. Publishing it does not give you any right to use the code itself.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+You may download the official releases from https://craftrank.org/launcher or from the
+Releases page of this repository, and run them on your own computers for personal use.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Without written permission from CraftRank you may not:
+  - copy, modify, translate or create works based on this code or any part of it;
+  - publish, distribute, sell, rent, sublicense or otherwise share it or its builds;
+  - publish a launcher, mod or service that uses this code, in whole or in part;
+  - use the names "CraftRank", "CraftRank Launcher", "RexOS" or "RexOS G0DBYE", or their
+    logos, in your own product or in a way that suggests you are connected to CraftRank;
+  - use the CraftRank servers and API (accounts, skins, capes, server list, statistics)
+    from any software other than the official CraftRank Launcher.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Third-party components included in the builds (such as Electron and the @xmcl libraries)
+remain under their own licenses, which are included with them.
+
+Versions 1.10.25 and earlier were published under the MIT License; those exact versions
+stay available under that license. This license applies to version 1.10.26 and everything
+published after it.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO
+EVENT SHALL CRAFTRANK BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE
+SOFTWARE OR ITS USE.
+
+Minecraft is a trademark of Mojang AB. The CraftRank Launcher is not affiliated with Mojang
+or Microsoft.
+
+Permission requests: https://craftrank.org/support

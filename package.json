@@ -1,11 +1,11 @@
 {
   "name": "craftrank-launcher",
   "productName": "CraftRank Launcher",
-  "version": "1.10.25",
+  "version": "1.10.26",
   "description": "CraftRank Launcher",
   "main": "src/main.js",
   "author": "CraftRank",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win --x64",
