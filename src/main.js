@@ -114,20 +114,42 @@ function noHome(t) {
 }
 // why a game closed with an error, in one short line read from what it printed: the mod that does not fit,
 // the exception, or running out of memory. Sent with the anonymous end event so crashes can be fixed.
+const OPTIFINE_CLASH_JAR = /^(sodium|embeddium|rubidium|magnesium|xenon|oculus|iris|chloride|reeses[-_ ]?sodium|textrues[-_ ]?embeddium)/i;
 function crashReason(log) {
   // the system details at the end of a crash report are not the cause ("Current Language: ~~ERROR~~ NullPointerException"
   // is printed whenever the game dies before its language loads), so they are never picked
   const SYS = /^(Current Language|Profiler Position|Is Modded|Type|Launched Version|LWJGL|OpenGL|GL Caps|Using VBOs|Resource Packs|Pack Format|Vec3 Pool Size|IntCache|Memory|JVM Flags|Java Version|Java VM Version|Operating System|CPU|Minecraft Version|Backend library|Backend API|Window size|GL debug messages|Loaded Shaderpack|OptiFine Version|OptiFine Build|Render Distance|Mipmaps|Anisotropic Filtering|Antialiasing|Multitexture|Shaders|OpenGlVersion|OpenGlRenderer|OpenGlVendor|CpuCount|FML|Loaded coremods|States|Graphics mode|Error|Stacktrace|Thread|Details)\s*:/i;
-  const L = String(log || '').split(/\r?\n/).map((x) => x.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, '').replace(/~~ERROR~~\s*/g, '').trim()).filter((x) => x && !SYS.test(x));
+  // newer versions print their log as log4j XML: take the text out of the CDATA blocks first
+  let txt = String(log || '');
+  if (/<log4j:|<!\[CDATA\[/.test(txt)) txt = txt.replace(/<!\[CDATA\[([\s\S]*?)(\]\]>|$)/g, (m, x) => '\n' + x + '\n').replace(/<\/?log4j:[^>]*>/g, '\n');
+  const L = txt.split(/\r?\n/).map((x) => x.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, '').replace(/~~ERROR~~\s*/g, '').trim()).filter((x) => x && !SYS.test(x));
   const find = (re) => { for (let i = L.length - 1; i >= 0; i--) if (re.test(L[i])) return i; return -1; };
   const first = (re) => L.findIndex((x) => re.test(x));
   let i = find(/Incompatible mods? found|Mod resolution (failed|encountered)/i);
-  if (i > -1) { const next = L.slice(i + 1).find((x) => /^-?\s*Mod '|requires|is incompatible|breaks/i.test(x)); return (next || L[i]).replace(/^-\s*/, ''); }
+  if (i > -1) {
+    const rest = L.slice(i + 1, i + 40);
+    const next = rest.find((x) => /^-?\s*Mod '|requires|is incompatible|breaks|conflicts/i.test(x)) || rest.find((x) => /^-?\s*(Remove|Replace|Install) mod/i.test(x));
+    return (next ? 'Incompatible mods: ' + next.replace(/^-\s*/, '') : L[i]).slice(0, 300);
+  }
   // Forge 1.7-1.12: a mod that needs another one, or a newer one
   i = find(/Missing Mods:|MissingModsException|requires .+ (or above|to be installed)|Duplicate Mods|DuplicateModsFoundException|WrongMinecraftVersionException/i);
   if (i > -1) return /^(Missing|Duplicate) Mods:$/i.test(L[i]) && L[i + 1] ? L[i] + ' ' + L[i + 1] : L[i];
   i = find(/OutOfMemoryError|Could not reserve enough space|Invalid maximum heap size/i);
   if (i > -1) return L[i];
+  // a mod's mixin failed: name the mod (or its mixin file) instead of a cut-off exception
+  i = find(/InvalidInjectionException|InjectionError|MixinApplyError|MixinTransformerError|MixinPreProcessorException|Critical injection failure|failed injection check/i);
+  if (i > -1) {
+    const near = L.slice(Math.max(0, i - 3), i + 8).join(' ');
+    const mod = (near.match(/from mod ([\w.-]+)/i) || [])[1], cfg = (near.match(/([\w.-]+\.json)(?=[:\]])/) || [])[1];
+    return ('A mod does not work with this version' + (mod ? ': ' + mod : cfg ? ' (' + cfg + ')' : '') + '. ' + L[i]).slice(0, 300);
+  }
+  // a mod needs code from another mod that is not there (Sodium-only mods on OptiFine, Fabric API missing…)
+  i = find(/ClassMetadataNotFoundException|NoClassDefFoundError|ClassNotFoundException/);
+  if (i > -1) {
+    const cls = (L[i].match(/(?:Exception|Error):\s*([\w.$\/]+)/) || [])[1] || '';
+    const who = [[/me[.\/]jellysquid|net[.\/]caffeinemc|embeddium|rubidium/i, 'Sodium (it does not work with OptiFine)'], [/net[.\/](coderbot|irisshaders)/i, 'Iris/Oculus (it does not work with OptiFine)'], [/me[.\/]flashyreese/i, 'Sodium Extra'], [/net[.\/]fabricmc[.\/]fabric/i, 'Fabric API'], [/net[.\/]optifine|optifine/i, 'OptiFine']].find(([re]) => re.test(cls));
+    return (who ? 'A mod needs ' + who[1] + ': ' : 'Missing class: ') + L[i].slice(0, 240);
+  }
   // a crash report: its description and the exception right under it say what happened
   const d = first(/^Description: /);
   if (d > -1) {
@@ -479,6 +501,11 @@ ipcMain.handle('play', async (e, opts) => {
     const boost = s.boost !== false ? { tier: (await boostTier()).tier, stamp: +s.boostStamp || 0 } : null;
     if (boost && (!pack || pack === 'none')) pack = 'perf';
     const mc = opts.mc || s.mc || (await game.versionList()).latest.release;
+    // OptiFine and the Sodium family can't run together; the Mods page already refuses them, this catches jars copied in by hand
+    if ((opts.loader || s.loader) === 'forge-optifine') {
+      let jars = []; try { jars = fs.readdirSync(path.join(game.instanceDir(ROOT, mc, 'forge-optifine'), 'mods')).filter((f) => /\.jar$/i.test(f) && OPTIFINE_CLASH_JAR.test(f)); } catch (e) {}
+      if (jars.length) return { ok: false, error: 'These mods do not work with OptiFine and would crash the game: ' + jars.slice(0, 4).join(', ') + (jars.length > 4 ? ' and ' + (jars.length - 4) + ' more' : '') + '. Remove them from the mods folder, or play with Forge instead of ForgeOptiFine.' };
+    }
     // CraftRank skins on servers (see game.syncSkinMod): the skin server from the site, also when playing offline
     let skinRoot = '';
     if (s.skinsOnServers !== false) { const cfg = await account.config(); skinRoot = cfg.ok && cfg.skin_server ? cfg.skin_server : SITE.replace(/\/+$/, '') + '/api/ygg/'; }
@@ -510,7 +537,7 @@ ipcMain.handle('play', async (e, opts) => {
     if (running.stdout) running.stdout.on('data', take);
     if (running.stderr) running.stderr.on('data', take);
     running.on('close', () => { if (out) out.end(); });
-    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1, error: code ? noHome(crashReason(log)).slice(0, 80) : '' }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
+    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1, error: code ? noHome(crashReason(log)).slice(0, 80) : '' }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', why: code ? noHome(crashReason(log)) : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
     if (s.closeOnPlay) win.hide();
     return { ok: true };
   } catch (err) {

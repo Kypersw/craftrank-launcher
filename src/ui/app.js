@@ -214,7 +214,7 @@ cr.on('game', (g) => {
   if (g.running && g.note) toast(g.note);
   if (!g.running && g.code) {
     const lines = (g.log || '').split('\n').map((l) => l.trim()).filter(Boolean);
-    const why = lines.reverse().find((l) => /OutOfMemory|Exception|Error|crash/i.test(l)) || lines[0] || '';
+    const why = g.why || lines.reverse().find((l) => /OutOfMemory|Exception|Error|crash/i.test(l)) || lines[0] || '';
     showMsg('Minecraft closed with an error (code ' + g.code + ').' + (/OutOfMemory/i.test(g.log || '') ? ' It ran out of memory: give it more in Settings.' : '') + (why ? ' ' + why.slice(0, 220) : '') + ' The full log is in the game folder, logs/launcher-output.log.');
   } else if (!g.running) showMsg('');
 });
