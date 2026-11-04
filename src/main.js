@@ -123,6 +123,9 @@ function crashReason(log) {
   let txt = String(log || '');
   if (/<log4j:|<!\[CDATA\[/.test(txt)) txt = txt.replace(/<!\[CDATA\[([\s\S]*?)(\]\]>|$)/g, (m, x) => '\n' + x + '\n').replace(/<\/?log4j:[^>]*>/g, '\n');
   const L = txt.split(/\r?\n/).map((x) => x.replace(/^\[[^\]]*\]\s*(\[[^\]]*\]:?\s*)?/, '').replace(/~~ERROR~~\s*/g, '').trim()).filter((x) => x && !SYS.test(x));
+  // Forge 1.7-1.12 prints ExitTrappedException when the game is stopped during start-up: it is the result, never the cause
+  const trapped = L.some((x) => /ExitTrappedException/.test(x));
+  for (let k = L.length - 1; k >= 0; k--) if (/ExitTrappedException|^at net\.minecraftforge\.fml\.relauncher\.FMLSecurityManager/.test(L[k])) L.splice(k, 1);
   const find = (re) => { for (let i = L.length - 1; i >= 0; i--) if (re.test(L[i])) return i; return -1; };
   const first = (re) => L.findIndex((x) => re.test(x));
   let i = find(/Incompatible mods? found|Mod resolution (failed|encountered)/i);
@@ -134,6 +137,9 @@ function crashReason(log) {
   // Forge 1.7-1.12: a mod that needs another one, or a newer one
   i = find(/Missing Mods:|MissingModsException|requires .+ (or above|to be installed)|Duplicate Mods|DuplicateModsFoundException|WrongMinecraftVersionException/i);
   if (i > -1) return /^(Missing|Duplicate) Mods:$/i.test(L[i]) && L[i + 1] ? L[i] + ' ' + L[i + 1] : L[i];
+  // a Java the game can't run on (Forge 1.12 needs Java 8, new versions need 17/21)
+  i = find(/cannot be cast to class java\.net\.URLClassLoader|UnsupportedClassVersionError|compiled by a more recent version of the Java Runtime|Unsupported class file major version/i);
+  if (i > -1) return ('Wrong Java version for this Minecraft version. ' + L[i]).slice(0, 300);
   i = find(/OutOfMemoryError|Could not reserve enough space|Invalid maximum heap size/i);
   if (i > -1) return L[i];
   // a mod's mixin failed: name the mod (or its mixin file) instead of a cut-off exception
@@ -147,7 +153,7 @@ function crashReason(log) {
   i = find(/ClassMetadataNotFoundException|NoClassDefFoundError|ClassNotFoundException/);
   if (i > -1) {
     const cls = (L[i].match(/(?:Exception|Error):\s*([\w.$\/]+)/) || [])[1] || '';
-    const who = [[/me[.\/]jellysquid|net[.\/]caffeinemc|embeddium|rubidium/i, 'Sodium (it does not work with OptiFine)'], [/net[.\/](coderbot|irisshaders)/i, 'Iris/Oculus (it does not work with OptiFine)'], [/me[.\/]flashyreese/i, 'Sodium Extra'], [/net[.\/]fabricmc[.\/]fabric/i, 'Fabric API'], [/net[.\/]optifine|optifine/i, 'OptiFine']].find(([re]) => re.test(cls));
+    const who = [[/me[.\/]jellysquid|net[.\/]caffeinemc|embeddium|rubidium/i, 'Sodium (it does not work with OptiFine)'], [/net[.\/](coderbot|irisshaders)/i, 'Iris/Oculus (it does not work with OptiFine)'], [/me[.\/]flashyreese/i, 'Sodium Extra'], [/org[.\/]spongepowered[.\/]asm[.\/]launch[.\/]Mixin(Tweaker|Bootstrap)/i, 'a Mixin loader (on Forge 1.12.2 install MixinBooter)'], [/net[.\/]fabricmc[.\/]fabric/i, 'Fabric API'], [/net[.\/]optifine|optifine/i, 'OptiFine']].find(([re]) => re.test(cls));
     return (who ? 'A mod needs ' + who[1] + ': ' : 'Missing class: ') + L[i].slice(0, 240);
   }
   // a crash report: its description and the exception right under it say what happened
@@ -163,7 +169,8 @@ function crashReason(log) {
   i = find(/\b[\w.$]+(Exception|Error)\b/);
   if (i > -1) return L[i];
   i = find(/EXCEPTION_ACCESS_VIOLATION|A fatal error has been detected/);
-  return i > -1 ? L[i] : '';
+  if (i > -1) return L[i];
+  return trapped ? 'A mod stopped the game during start-up (Forge). See the log.' : '';
 }
 function friendly(err) {
   const m = err && err.message ? err.message : String(err);
