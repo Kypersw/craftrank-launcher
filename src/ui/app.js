@@ -691,6 +691,8 @@ function renderShare(st) {
     : st.state === 'error' ? (st.error || 'Sharing stopped.') : 'Connecting to the CraftRank relay…';
   $('#msvAddr').hidden = $('#msvCopy').hidden = !(on && st.state === 'online' && st.address);
   $('#msvAddr').textContent = on ? st.address || '' : '';
+  $('#msvInvite').hidden = !(on && st.state === 'online' && st.invite);
+  $('#msvInvite').dataset.url = on ? st.invite || '' : '';
   $('#msvShareBtn').textContent = on && st.state !== 'error' ? 'Stop sharing' : st && mine && st.state === 'error' ? 'Try again' : 'Share';
   $('#msvShareBtn').className = 'btn ' + (on && st.state !== 'error' ? 'plain' : 'blue');
   state.ms.share = st;
@@ -701,6 +703,7 @@ $('#msvShareBtn').addEventListener('click', async () => {
   if (!r.ok) toast(r.error);
 });
 $('#msvCopy').addEventListener('click', () => { navigator.clipboard.writeText($('#msvAddr').textContent); toast('Address copied. Friends add it in Multiplayer.'); });
+$('#msvInvite').addEventListener('click', () => { navigator.clipboard.writeText($('#msvInvite').dataset.url || ''); toast('Invite link copied. Paste it in Discord or a chat.'); });
 cr.on('srv:share', (st) => { if (!st.id || st.id === state.ms.sel) renderShare(st); });
 cr.on('srv:progress', (p) => { if (p && state.ms.sel) $('#msvLog').textContent = p.stage + ' ' + (p.pct || 0) + '%'; });
 

@@ -10,7 +10,7 @@ module.exports = function makeTunnel(account, emit) {
 
   function status(extra) {
     if (!cur) return emit({ id: null, state: 'off' });
-    emit(Object.assign({ id: cur.id, state: cur.state, address: cur.address || '', players: cur.links.size, error: cur.error || '' }, extra || {}));
+    emit(Object.assign({ id: cur.id, state: cur.state, address: cur.address || '', invite: cur.invite || '', players: cur.links.size, error: cur.error || '' }, extra || {}));
   }
 
   function link(t, cid) {
@@ -38,6 +38,7 @@ module.exports = function makeTunnel(account, emit) {
     if (!r.ok) { cur.state = 'error'; cur.error = r.error || 'Sharing is not available right now.'; status(); return retry(t, r.status === 401 || r.status === 403 ? 0 : 30000); }
     Object.assign(t, { relay: r.relay, port: r.port, tlsName: r.tls_name });
     cur.address = r.address;
+    cur.invite = /^https:\/\/[a-z0-9.-]+\/play\/[a-z0-9-]+$/.test(r.invite || '') ? r.invite : '';   // a page friends can open: status and how to join
     const sock = tls.connect({ host: r.relay, port: r.port, servername: r.tls_name, timeout: 20000 });
     cur.sock = sock;
     let buf = '';
@@ -92,6 +93,6 @@ module.exports = function makeTunnel(account, emit) {
       cur = null;
       emit({ id: c.id, state: 'off' });
     },
-    current() { return cur ? { id: cur.id, state: cur.state, address: cur.address || '', players: cur.links.size, error: cur.error || '' } : null; },
+    current() { return cur ? { id: cur.id, state: cur.state, address: cur.address || '', invite: cur.invite || '', players: cur.links.size, error: cur.error || '' } : null; },
   };
 };
