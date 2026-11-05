@@ -128,11 +128,35 @@ function crashReason(log) {
   for (let k = L.length - 1; k >= 0; k--) if (/ExitTrappedException|^at net\.minecraftforge\.fml\.relauncher\.FMLSecurityManager/.test(L[k])) L.splice(k, 1);
   const find = (re) => { for (let i = L.length - 1; i >= 0; i--) if (re.test(L[i])) return i; return -1; };
   const first = (re) => L.findIndex((x) => re.test(x));
+  // lines that only say "it failed": never the answer when anything more specific is there
+  const GENERIC = /Failed to start FML|Loading errors encountered|Mod Loading has failed|ModLoadingException:?\s*$|Encountered an unexpected exception|Exception in thread "main"|ReportedException|InvocationTargetException|Could not execute entrypoint stage|Game crashed|^java\.lang\.RuntimeException:?\s*$/i;
+  const findSpecific = (re) => { for (let k = L.length - 1; k >= 0; k--) if (re.test(L[k]) && !GENERIC.test(L[k])) return k; return -1; };
   let i = find(/Incompatible mods? found|Mod resolution (failed|encountered)/i);
   if (i > -1) {
     const rest = L.slice(i + 1, i + 40);
     const next = rest.find((x) => /^-?\s*Mod '|requires|is incompatible|breaks|conflicts/i.test(x)) || rest.find((x) => /^-?\s*(Remove|Replace|Install) mod/i.test(x));
     return (next ? 'Incompatible mods: ' + next.replace(/^-\s*/, '') : L[i]).slice(0, 300);
+  }
+  // Forge / NeoForge mod loading: the first lines only say that loading failed ("Failed to start FML",
+  // "Loading errors encountered", "Mod Loading has failed"); the reason is in the lines under them
+  i = first(/^Failure message:/i);
+  if (i > -1) {
+    const near = L.slice(Math.max(0, i - 4), i + 2).join(' ');
+    const mod = (near.match(/Mod loading issue for: ([\w.-]+)/i) || near.match(/Mod (?:ID|File): ['"]?(?:.*[\\\/])?([\w.+-]+)/i) || [])[1];
+    const more = L[i + 1] && !GENERIC.test(L[i + 1]) && /(Exception|Error)\b/.test(L[i + 1]) ? ' (' + L[i + 1] + ')' : '';
+    return ('Mod loading failed' + (mod ? ' (' + mod + ')' : '') + ': ' + L[i].replace(/^Failure message:\s*/i, '') + more).slice(0, 300);
+  }
+  i = find(/Loading errors encountered|Mod Loading has failed|Missing or unsupported mandatory dependencies|errors? (were|was) found during mod loading/i);
+  if (i > -1) {
+    const rest = L.slice(i + 1, i + 40).filter((x) => !GENERIC.test(x) && !/^at /.test(x));
+    const k = rest.findIndex((x) => /^-\s*\S|^Mod ID: |requires|not installed|is missing|not a valid|only supports|incompatible|duplicate|needs /i.test(x));
+    if (k > -1) {
+      let r = rest[k].replace(/^-\s*/, '');
+      if (rest[k + 1] && /^(Currently|Expected|Actual|Found)/i.test(rest[k + 1])) r += '. ' + rest[k + 1];
+      return ('Mod loading failed: ' + r).slice(0, 300);
+    }
+    const tail = (L[i].split(/Loading errors encountered:?|mandatory dependencies:?/i)[1] || '').trim();
+    if (tail.length > 5) return ('Mod loading failed: ' + tail).slice(0, 300);
   }
   // Forge 1.7-1.12: a mod that needs another one, or a newer one
   i = find(/Missing Mods:|MissingModsException|requires .+ (or above|to be installed)|Duplicate Mods|DuplicateModsFoundException|WrongMinecraftVersionException/i);
@@ -162,15 +186,17 @@ function crashReason(log) {
   // a crash report: its description and the exception right under it say what happened
   const d = first(/^Description: /);
   if (d > -1) {
-    const ex = L.slice(d + 1, d + 6).find((x) => /^[\w.$]+(Exception|Error)\b/.test(x));
+    const ex = L.slice(d + 1, d + 6).find((x) => /^[\w.$]+(Exception|Error)\b/.test(x) && !GENERIC.test(x));
     const cause = L.slice(d + 1).find((x) => /^Caused by: /.test(x));
     const desc = L[d].replace(/^Description: /, '');
     return (desc + (ex ? ': ' + ex : '') + (cause && !/^Caused by: java\.lang\.reflect\.InvocationTargetException/.test(cause) ? ' (' + cause.replace(/^Caused by: /, '') + ')' : '')).slice(0, 300);
   }
-  i = find(/^Caused by: /);
+  i = findSpecific(/^Caused by: /);
   if (i > -1) return L[i].replace(/^Caused by: /, '');
-  i = find(/\b[\w.$]+(Exception|Error)\b/);
+  i = findSpecific(/\b[\w.$]+(Exception|Error)\b/);
   if (i > -1) return L[i];
+  i = find(/^Caused by: |\b[\w.$]+(Exception|Error)\b/);
+  if (i > -1) return L[i].replace(/^Caused by: /, '');
   i = find(/EXCEPTION_ACCESS_VIOLATION|A fatal error has been detected/);
   if (i > -1) return L[i];
   return trapped ? 'A mod stopped the game during start-up (Forge). See the log.' : '';
@@ -547,7 +573,7 @@ ipcMain.handle('play', async (e, opts) => {
     if (running.stdout) running.stdout.on('data', take);
     if (running.stderr) running.stderr.on('data', take);
     running.on('close', () => { if (out) out.end(); });
-    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1, error: code ? noHome(crashReason(log)).slice(0, 80) : '' }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', why: code ? noHome(crashReason(log)) : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
+    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1, error: code ? noHome(crashReason(log)).slice(0, 300) : '' }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', why: code ? noHome(crashReason(log)) : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
     if (s.closeOnPlay) win.hide();
     return { ok: true };
   } catch (err) {
