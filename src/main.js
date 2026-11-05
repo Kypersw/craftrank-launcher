@@ -126,6 +126,9 @@ function crashReason(log) {
   // Forge 1.7-1.12 prints ExitTrappedException when the game is stopped during start-up: it is the result, never the cause
   const trapped = L.some((x) => /ExitTrappedException/.test(x));
   for (let k = L.length - 1; k >= 0; k--) if (/ExitTrappedException|^at net\.minecraftforge\.fml\.relauncher\.FMLSecurityManager/.test(L[k])) L.splice(k, 1);
+  // Realms and Mojang sign-in complaints are printed on every start with a non-premium account and never stop the game
+  const NOISE = /RealmsServiceException|Realms authentication error|SignedJWT|com\.mojang\.realmsclient|Failed to fetch user properties|Couldn't connect to realms|AuthenticationUnavailableException|Failed to verify authentication|InvalidCredentialsException|Failed to (fetch|retrieve) profile (keys|key pair)|ProfileKeyPair|player certificates/i;
+  for (let k = L.length - 1; k >= 0; k--) if (NOISE.test(L[k])) { let n = 1; while (k + n < L.length && /^(at |\.\.\. \d+ more|Caused by: .*(Realms|SignedJWT|authlib))/.test(L[k + n])) n++; L.splice(k, n); }
   const find = (re) => { for (let i = L.length - 1; i >= 0; i--) if (re.test(L[i])) return i; return -1; };
   const first = (re) => L.findIndex((x) => re.test(x));
   // lines that only say "it failed": never the answer when anything more specific is there
@@ -524,13 +527,13 @@ ipcMain.handle('play', async (e, opts) => {
     let acct, skinServer = null;
     if ((opts.playAs || s.playAs) === 'craftrank') {
       if (!(me.ok && me.profile)) return { ok: false, error: 'Sign in to CraftRank and pick your in-game name to play with your CraftRank skin.' };
-      acct = { name: me.profile.name, uuid: me.profile.uuid, token: me.profile.uuid, type: 'mojang' };
+      acct = { name: me.profile.name, uuid: me.profile.uuid, type: 'mojang' };   // the game gets a JWT-shaped token (game.js offlineToken)
       const cfg = await account.config();
       skinServer = cfg.ok ? cfg.skin_server : SITE + '/api/ygg/';
     } else {
       const name = String(opts.username || s.username || '').trim();
       if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) return { ok: false, error: 'Pick a username: 3 to 16 letters, numbers or _.' };
-      acct = { name, uuid: offlineUuid(name), token: offlineUuid(name), type: 'legacy' };
+      acct = { name, uuid: offlineUuid(name), type: 'legacy' };
     }
     let pack = opts.pack !== undefined ? opts.pack : s.pack;
     // CraftBoost: performance mods on Fabric, Quilt and NeoForge, FPS settings once per version, Java flags

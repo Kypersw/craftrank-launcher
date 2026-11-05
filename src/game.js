@@ -518,6 +518,13 @@ const BOOST = {
   mid: { renderDistance: 12, simulationDistance: 8, graphics: 1, particles: 0, entityShadows: true, clouds: 'fast', mipmapLevels: 2, biomeBlendRadius: 1, ao: true, entityDistanceScaling: 1 },
   high: { renderDistance: 16, simulationDistance: 10, graphics: 1, particles: 0, entityShadows: true, clouds: 'true', mipmapLevels: 4, biomeBlendRadius: 2, ao: true, entityDistanceScaling: 1 },
 };
+// accounts without a Mojang sign-in still need an access token. Minecraft 26.x reads it as a signed JWT for Realms and
+// logs "Failed to parse into SignedJWT" when it is not one, so it gets a well-formed (unsigned, useless) token instead
+function offlineToken(account) {
+  const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  return b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64({ sub: String(account.uuid || ''), xuid: '0', iat: now, exp: now + 86400, iss: 'craftrank' }) + '.' + crypto.randomBytes(32).toString('base64url');
+}
 function mcAtLeast(mc, a, b) { const m = /^1\.(\d+)(?:\.(\d+))?/.exec(mc); if (!m) return /^\d{2}\./.test(mc); return +m[1] > a || (+m[1] === a && +(m[2] || 0) >= (b || 0)); }
 function applyBoost(instDir, mc, boost) {
   const t = BOOST[boost.tier] || BOOST.mid;
@@ -872,7 +879,7 @@ async function start(root, prep, account, opts) {
   try {
     proc = await launch({
     gamePath: prep.instDir, resourcePath: root, javaPath: prep.java, version: prep.id, nativeRoot,
-    gameProfile: { name: account.name, id: account.uuid }, accessToken: account.token || account.uuid, userType: account.type || 'mojang',
+    gameProfile: { name: account.name, id: account.uuid }, accessToken: account.token || offlineToken(account), userType: account.type || 'mojang',
     maxMemory: opts.memory, minMemory: opts.boost ? Math.floor(opts.memory / 2) : Math.min(1024, opts.memory),
     launcherName: 'CraftRank', launcherBrand: 'CraftRank Launcher',
     extraJVMArgs, extraExecOption: { detached: false },

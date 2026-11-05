@@ -50,6 +50,13 @@ java.lang.NullPointerException: Cannot invoke "x.y()" because "z" is null
   ['Generic wrapper with a real cause', `Exception in thread "main" java.lang.reflect.InvocationTargetException
 	at sun.reflect.x
 Caused by: java.lang.UnsatisfiedLinkError: Failed to load library lwjgl.dll`, /UnsatisfiedLinkError/],
+  ['26.x Realms sign-in noise before the real crash', `[22:01:10] [Render thread/ERROR]: Couldn't fetch Realms info
+com.mojang.realmsclient.exception.RealmsServiceException: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0c9e384039ba326ebe61366a8bf5e96b'
+	at com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:1)
+[22:01:14] [Render thread/ERROR]: Unreported exception thrown!
+java.lang.IllegalStateException: GLFW error 65543: WGL: OpenGL profile requested but WGL_ARB_create_context_profile is unavailable`, /GLFW error 65543/],
+  ['26.x Realms sign-in noise only', `com.mojang.realmsclient.exception.RealmsServiceException: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0c9e'
+	at com.mojang.realmsclient.client.RealmsClient.execute(RealmsClient.java:1)`, /^(?![\s\S]*(Realms|SignedJWT))/],
 ];
 let bad = 0;
 for (const [name, log, want] of cases) {

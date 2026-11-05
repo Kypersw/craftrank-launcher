@@ -1,1 +1,1 @@
-Fixed Copy invite link: it now always copies the link to your shared server's page on craftrank.org, and the message shows the link that was copied.
+Minecraft 26.x no longer logs "Realms authentication error: Failed to parse into SignedJWT" when you play without a Microsoft account. Crash reports also skip Realms and sign-in messages now, so they show the real reason the game closed.
