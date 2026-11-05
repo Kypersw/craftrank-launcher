@@ -632,7 +632,9 @@ ipcMain.handle('modpacks:remove', safe(async (e, id) => { const v = await curVer
 ipcMain.handle('mods:folder', async () => { const v = await curVer(); const d = game.modState(ROOT, v.mc, v.loader).dir; fs.mkdirSync(d, { recursive: true }); shell.openPath(d); });
 
 /* my servers */
-const sline = (id, line, stopped) => send('srv:line', { id, line, stopped: !!stopped });
+const tunnel = require('./tunnel')(account, (st) => send('srv:share', st));
+// a stopped server stops being shared
+const sline = (id, line, stopped) => { if (stopped) tunnel.stop(id); send('srv:line', { id, line, stopped: !!stopped }); };
 ipcMain.handle('srv:types', () => servers.TYPES);
 ipcMain.handle('srv:versions', safe(async (e, type) => ({ ok: true, versions: await servers.versionsFor(type) })));
 ipcMain.handle('srv:list', () => servers.listServers(ROOT));
@@ -642,4 +644,12 @@ ipcMain.handle('srv:stop', (e, id) => { servers.stopServer(ROOT, id); return { o
 ipcMain.handle('srv:cmd', (e, id, c) => { servers.command(id, c); return { ok: true }; });
 ipcMain.handle('srv:log', (e, id) => servers.logOf(id));
 ipcMain.handle('srv:remove', safe(async (e, id) => { servers.removeServer(ROOT, id); return { ok: true }; }));
+ipcMain.handle('srv:share', (e, id, on) => {
+  const s = servers.listServers(ROOT).find((x) => x.id === id);
+  if (!on || !s) { tunnel.stop(id); return { ok: true }; }
+  if (!s.running) return { ok: false, error: 'Start the server first.' };
+  tunnel.start(id, s.port);
+  return { ok: true };
+});
+ipcMain.handle('srv:shareState', () => tunnel.current());
 ipcMain.handle('srv:open', (e, id) => { const s = servers.listServers(ROOT).find((x) => x.id === id); if (s) shell.openPath(s.dir); });

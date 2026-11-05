@@ -91,6 +91,8 @@ module.exports = function makeAccount(base, file, version, installId) {
     equip: (kind, item, on = true) => call('equip', { json: { kind, item, on } }),
     premium: () => call('premium'),
     premiumBuy: (plan) => call('premium_buy', { json: { plan } }),
+    // a signed name for sharing a server from My servers (name.play.craftrank.org)
+    tunnel: () => tok() ? call('tunnel', { json: {} }) : Promise.resolve({ ok: false, status: 401, error: 'Sign in to your CraftRank account to share a server.' }),
     outfits: () => call('outfits'),
     outfitSave: (name) => call('outfit_save', { json: { name } }),
     outfitWear: (id) => call('outfit_wear', { json: { id } }),

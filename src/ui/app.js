@@ -666,6 +666,8 @@ async function showServer(id) {
   $('#msvName').textContent = s.name;
   $('#msvMeta').textContent = s.type + ' ' + s.version + ' · ' + (s.memory / 1024).toFixed(1) + ' GB · join with localhost' + (s.port !== 25565 ? ':' + s.port : '');
   $('#msvStart').hidden = s.running; $('#msvStop').hidden = !s.running;
+  $('#msvShare').hidden = !s.running;
+  renderShare(await cr.srv.shareState());
   const log = await cr.srv.log(id);
   $('#msvLog').textContent = log.join('\n') || (s.running ? '' : 'The server is stopped. Press Start.');
   $('#msvLog').scrollTop = 1e9;
@@ -679,6 +681,27 @@ cr.on('srv:line', (d) => {
   if (d.id === state.ms.sel) { const el = $('#msvLog'); const end = el.scrollTop + el.clientHeight >= el.scrollHeight - 30; el.textContent += (el.textContent ? '\n' : '') + d.line; if (end) el.scrollTop = 1e9; }
   if (d.stopped) loadServers();
 });
+/* sharing a running server with friends (name.play.craftrank.org through CraftRank's relay) */
+function renderShare(st) {
+  const mine = st && st.id === state.ms.sel, on = mine && st.state !== 'off';
+  const txt = $('#msvShareTxt');
+  txt.className = mine && st.state === 'error' ? 'err' : '';
+  txt.textContent = !on ? 'Friends join with your own address, no port forwarding. They never see your IP.'
+    : st.state === 'online' ? (st.players ? st.players + ' connected right now' : 'Online. Send the address to your friends.')
+    : st.state === 'error' ? (st.error || 'Sharing stopped.') : 'Connecting to the CraftRank relay…';
+  $('#msvAddr').hidden = $('#msvCopy').hidden = !(on && st.state === 'online' && st.address);
+  $('#msvAddr').textContent = on ? st.address || '' : '';
+  $('#msvShareBtn').textContent = on && st.state !== 'error' ? 'Stop sharing' : st && mine && st.state === 'error' ? 'Try again' : 'Share';
+  $('#msvShareBtn').className = 'btn ' + (on && st.state !== 'error' ? 'plain' : 'blue');
+  state.ms.share = st;
+}
+$('#msvShareBtn').addEventListener('click', async () => {
+  const st = state.ms.share, sharing = st && st.id === state.ms.sel && ['online', 'connecting'].includes(st.state);
+  const r = await cr.srv.share(state.ms.sel, !sharing);
+  if (!r.ok) toast(r.error);
+});
+$('#msvCopy').addEventListener('click', () => { navigator.clipboard.writeText($('#msvAddr').textContent); toast('Address copied. Friends add it in Multiplayer.'); });
+cr.on('srv:share', (st) => { if (!st.id || st.id === state.ms.sel) renderShare(st); });
 cr.on('srv:progress', (p) => { if (p && state.ms.sel) $('#msvLog').textContent = p.stage + ' ' + (p.pct || 0) + '%'; });
 
 /* ---------- settings ---------- */
