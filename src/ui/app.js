@@ -703,7 +703,11 @@ $('#msvShareBtn').addEventListener('click', async () => {
   if (!r.ok) toast(r.error);
 });
 $('#msvCopy').addEventListener('click', () => { navigator.clipboard.writeText($('#msvAddr').textContent); toast('Address copied. Friends add it in Multiplayer.'); });
-$('#msvInvite').addEventListener('click', () => { navigator.clipboard.writeText($('#msvInvite').dataset.url || ''); toast('Invite link copied. Paste it in Discord or a chat.'); });
+$('#msvInvite').addEventListener('click', () => {
+  const u = $('#msvInvite').dataset.url || '';
+  if (!u) return toast('The invite link is not ready yet. Try again in a moment.');
+  navigator.clipboard.writeText(u).then(() => toast('Invite link copied: ' + u), () => toast('Could not copy. The link is ' + u));
+});
 cr.on('srv:share', (st) => { if (!st.id || st.id === state.ms.sel) renderShare(st); });
 cr.on('srv:progress', (p) => { if (p && state.ms.sel) $('#msvLog').textContent = p.stage + ' ' + (p.pct || 0) + '%'; });
 

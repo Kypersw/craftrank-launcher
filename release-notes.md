@@ -1,1 +1,1 @@
-Invite links for shared servers. While a server from My servers is shared, press Copy invite link and send it to friends in Discord or any chat. The link opens a page on craftrank.org that shows whether your server is online, its version and player count, and how to join step by step. Friends can join from any Minecraft launcher.
+Fixed Copy invite link: it now always copies the link to your shared server's page on craftrank.org, and the message shows the link that was copied.

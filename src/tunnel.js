@@ -38,7 +38,9 @@ module.exports = function makeTunnel(account, emit) {
     if (!r.ok) { cur.state = 'error'; cur.error = r.error || 'Sharing is not available right now.'; status(); return retry(t, r.status === 401 || r.status === 403 ? 0 : 30000); }
     Object.assign(t, { relay: r.relay, port: r.port, tlsName: r.tls_name });
     cur.address = r.address;
-    cur.invite = /^https:\/\/[a-z0-9.-]+\/play\/[a-z0-9-]+$/.test(r.invite || '') ? r.invite : '';   // a page friends can open: status and how to join
+    // a page friends can open: status and how to join (built from the address if the website did not send it)
+    const m = /^([a-z0-9-]+)\.play\.([a-z0-9.-]+\.[a-z]{2,})$/.exec(r.address || '');
+    cur.invite = /^https:\/\/[a-z0-9.-]+\/play\/[a-z0-9-]+$/.test(r.invite || '') ? r.invite : m ? 'https://' + m[2] + '/play/' + m[1] : '';
     const sock = tls.connect({ host: r.relay, port: r.port, servername: r.tls_name, timeout: 20000 });
     cur.sock = sock;
     let buf = '';
