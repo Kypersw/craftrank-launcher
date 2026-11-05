@@ -446,7 +446,11 @@ async function prepare(root, opts, progress) {
     }
   }
   const base = await Version.parse(new MinecraftFolder(root), opts.mc);
-  const java = await ensureJava(root, (base.javaVersion && base.javaVersion.component) || 'jre-legacy', progress);
+  // 1.17.x asks for Java 16, but many Fabric/Forge mods for it are built for Java 17 (Mixin "JAVA_17" crash);
+  // the game itself runs fine on Java 17, so 1.17.x always gets it
+  let jc = (base.javaVersion && base.javaVersion.component) || 'jre-legacy';
+  if (/^1\.17(\.|$)/.test(String(opts.mc)) && jc === 'java-runtime-alpha') jc = 'java-runtime-gamma';
+  const java = await ensureJava(root, jc, progress);
   let id = opts.mc, ofJar = null;
   let loader = LOADERS.includes(opts.loader) ? opts.loader : 'vanilla';
   // The folder (worlds, settings) stays the one of the picked version, even when it runs with a loader below.

@@ -140,6 +140,9 @@ function crashReason(log) {
   // a Java the game can't run on (Forge 1.12 needs Java 8, new versions need 17/21)
   i = find(/cannot be cast to class java\.net\.URLClassLoader|UnsupportedClassVersionError|compiled by a more recent version of the Java Runtime|Unsupported class file major version/i);
   if (i > -1) return ('Wrong Java version for this Minecraft version. ' + L[i]).slice(0, 300);
+  // a mod built for a newer Java than the one this version runs on (Mixin: "requested compatibility level JAVA_17")
+  i = find(/requested compatibility level JAVA_(\d+)/i);
+  if (i > -1) return ('A mod needs Java ' + L[i].match(/JAVA_(\d+)/i)[1] + ', newer than the Java this Minecraft version runs on. Remove that mod or use its version made for this Minecraft. ' + L[i]).slice(0, 300);
   i = find(/OutOfMemoryError|Could not reserve enough space|Invalid maximum heap size/i);
   if (i > -1) return L[i];
   // a mod's mixin failed: name the mod (or its mixin file) instead of a cut-off exception
