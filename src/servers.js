@@ -1,10 +1,11 @@
-// "My servers": create and run your own server (Paper, Purpur, Vanilla, BungeeCord, Velocity) on this PC.
+// "My servers": create and run your own server (Ashlar, Paper, Purpur, Vanilla, BungeeCord, Velocity) on this PC.
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { getJson, download, ensureJava, consoleJava, versionList } = require('./game');
 
 const TYPES = {
+  ashlar: { name: 'Ashlar', proxy: false, about: 'Paper made by CraftRank: every version from 1.8 can join, anti-bot and votes built in.' },
   paper: { name: 'Paper', proxy: false, about: 'Fast server with plugin support. The usual choice.' },
   purpur: { name: 'Purpur', proxy: false, about: 'Paper with many extra settings.' },
   vanilla: { name: 'Vanilla', proxy: false, about: "Mojang's own server, no plugins." },
@@ -15,11 +16,27 @@ const TYPES = {
 
 const procs = new Map();   // id -> { child, log }
 
+// Ashlar is published as GitHub releases of Kypersw/ashlar, one jar per Minecraft version: ashlar-<version>.jar
+const ASHLAR_RELEASES = 'https://api.github.com/repos/Kypersw/ashlar/releases?per_page=30';
+const ASHLAR_JAR = /^ashlar-([0-9][0-9A-Za-z._-]{0,38})\.jar$/;
+async function ashlarAssets() {
+  const out = new Map();   // version -> newest jar asset (the API lists the newest release first)
+  for (const r of await getJson(ASHLAR_RELEASES)) {
+    if (r.draft || r.prerelease) continue;
+    for (const a of r.assets || []) {
+      const m = ASHLAR_JAR.exec(a.name);
+      if (m && !out.has(m[1])) out.set(m[1], a);
+    }
+  }
+  return out;
+}
+
 async function versionsFor(type) {
   if (type === 'paper' || type === 'velocity') {
     const j = await getJson('https://fill.papermc.io/v3/projects/' + type);
     return Object.values(j.versions).flat().filter((v) => !/(pre|rc|SNAPSHOT)/i.test(v));
   }
+  if (type === 'ashlar') return [...(await ashlarAssets()).keys()];
   if (type === 'purpur') return (await getJson('https://api.purpurmc.org/v2/purpur')).versions.slice().reverse();
   if (type === 'vanilla') return (await versionList()).versions.filter((v) => v.type === 'release').map((v) => v.id);
   return [];
@@ -31,6 +48,13 @@ async function jarUrl(type, version) {
     const b = await getJson('https://fill.papermc.io/v3/projects/' + type + '/versions/' + encodeURIComponent(version) + '/builds/latest');
     const d = b.downloads['server:default'];
     return { url: d.url, expect: d.checksums || null };
+  }
+  if (type === 'ashlar') {   // GitHub gives the SHA-256 of every release file
+    const a = (await ashlarAssets()).get(version);
+    if (!a) throw new Error('No Ashlar build for ' + version + ' yet.');
+    const sha = /^sha256:([a-f0-9]{64})$/.exec(String(a.digest || ''));
+    if (!sha || !/^https:\/\/github\.com\/Kypersw\/ashlar\/releases\/download\//.test(a.browser_download_url)) throw new Error('GitHub did not give a checksum for this Ashlar build.');
+    return { url: a.browser_download_url, expect: { sha256: sha[1] } };
   }
   if (type === 'purpur') {   // the newest build, by number, with its MD5 from Purpur's API
     const b = await getJson('https://api.purpurmc.org/v2/purpur/' + encodeURIComponent(version) + '/latest');
@@ -49,11 +73,12 @@ async function jarUrl(type, version) {
 const ID = /^[a-z0-9-]{1,80}$/;
 const int = (v, lo, hi, d) => { const n = Math.round(+v); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
 
-/** Java the server needs: proxies and new versions run on 21, old versions on 8 or 17. */
+/** Java the server needs: 26.x and Ashlar run on 25, proxies and 1.20.5 to 1.21.x on 21, old versions on 8 or 17. */
 function javaFor(type, version) {
   if (TYPES[type].proxy) return 'java-runtime-delta';
+  if (type === 'ashlar') return 'java-runtime-epsilon';   // Ashlar needs Java 25
   const m = /^1\.(\d+)/.exec(version);
-  if (!m) return 'java-runtime-delta';           // year-based versions (26.x) are new
+  if (!m) return 'java-runtime-epsilon';         // year-based versions (26.x) need Java 25, as in Mojang's version files
   const minor = +m[1];
   if (minor >= 21 || (minor === 20 && !/^1\.20(\.[0-4])?$/.test(version))) return 'java-runtime-delta';
   if (minor >= 17) return 'java-runtime-gamma';
