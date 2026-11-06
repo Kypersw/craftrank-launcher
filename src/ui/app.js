@@ -184,6 +184,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#verPop
 
 /* ---------- play ---------- */
 async function play(server) {
+  state.lastServer = server || null;
   if (state.running) return;
   // typing your own CraftRank name also means: play with my CraftRank skin
   const typed = $('#barName').value.trim().toLowerCase();
@@ -216,6 +217,20 @@ cr.on('game', (g) => {
     const lines = (g.log || '').split('\n').map((l) => l.trim()).filter(Boolean);
     const why = g.why || lines.reverse().find((l) => /OutOfMemory|Exception|Error|crash/i.test(l)) || lines[0] || '';
     showMsg('Minecraft closed with an error (code ' + g.code + ').' + (/OutOfMemory/i.test(g.log || '') ? ' It ran out of memory: give it more in Settings.' : '') + (why ? ' ' + why.slice(0, 220) : '') + ' The full log is in the game folder, logs/launcher-output.log.');
+    if (g.culprit && g.culprit.file) {
+      // the crash points at one mod: offer to turn it off and start again (same server as before)
+      const m = $('#msg'), b = document.createElement('button');
+      b.className = 'note-fix'; b.textContent = 'Turn off ' + g.culprit.name + ' and play';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        const r = await cr.mods.off(g.culprit.file);
+        if (!r || !r.ok) { showMsg((r && r.error) || 'Could not turn the mod off.'); return; }
+        toast(r.name + ' is off. You can install it again from the Mods page.');
+        play(state.lastServer || null);
+      });
+      m.appendChild(document.createElement('br')); m.appendChild(b);
+      clearTimeout(msgT); msgT = setTimeout(() => { m.hidden = true; }, 45000);
+    }
   } else if (!g.running) showMsg('');
 });
 

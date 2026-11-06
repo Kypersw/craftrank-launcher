@@ -106,6 +106,51 @@ const progress = (stage, pct) => {
   send('progress', { stage, pct: barNow });
 };
 
+// the names of the files inside a .jar, read from the zip's central directory (nothing is unpacked)
+function jarNames(f) {
+  const fd = fs.openSync(f, 'r');
+  try {
+    const size = fs.fstatSync(fd).size, n = Math.min(size, 65557), tail = Buffer.alloc(n);
+    fs.readSync(fd, tail, 0, n, size - n);
+    const e = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    if (e < 0 || e + 22 > n) return [];
+    const cnt = tail.readUInt16LE(e + 10), cdSize = tail.readUInt32LE(e + 12), cdOff = tail.readUInt32LE(e + 16);
+    if (cdSize > 8e6 || cdOff + cdSize > size) return [];
+    const cd = Buffer.alloc(cdSize); fs.readSync(fd, cd, 0, cdSize, cdOff);
+    const out = [];
+    for (let p = 0, i = 0; i < cnt && p + 46 <= cd.length && cd.readUInt32LE(p) === 0x02014b50; i++) {
+      const nl = cd.readUInt16LE(p + 28), xl = cd.readUInt16LE(p + 30), cl = cd.readUInt16LE(p + 32);
+      out.push(cd.toString('utf8', p + 46, p + 46 + nl)); p += 46 + nl + xl + cl;
+    }
+    return out;
+  } finally { fs.closeSync(fd); }
+}
+// the mod file a crash reason points at ("A mod does not work with this version: memoryleakfix", "... (memoryleakfix.mixins.json)",
+// "Mod loading failed (modid)"), so the player can turn it off in one click. Mods the launcher manages itself (the mod pack,
+// the skin helper) are never offered: they come back on the next start anyway.
+function crashCulprit(instDir, why) {
+  const m = /^(?:A mod does not work with this version|Mod loading failed)(?::\s*([A-Za-z0-9_-]+)\.(?:\s|$)|\s*\(([\w.-]+)\))/.exec(String(why || ''));
+  const key = m && (m[1] || m[2]); if (!key) return null;
+  const dir = path.join(instDir, 'mods'), managed = new Set();
+  for (const n of ['craftrank-pack.json', 'craftrank-skins.json']) {
+    try { const j = JSON.parse(fs.readFileSync(path.join(instDir, n), 'utf8')) || {}; (j.files || []).concat(j.file || []).forEach((f) => managed.add(String(f).toLowerCase())); } catch (e) {}
+  }
+  let jars = []; try { jars = fs.readdirSync(dir).filter((f) => /\.jar$/i.test(f)); } catch (e) { return null; }
+  const norm = (x) => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const k = key.toLowerCase(), cfg = /\.json$/i.test(key), id = norm(cfg ? key.split('.')[0] : key);
+  if (id.length < 3) return null;
+  let hit = null;
+  for (const f of jars) {
+    let names = []; try { names = jarNames(path.join(dir, f)); } catch (e) {}
+    const top = names.filter((x) => !x.includes('/')).map((x) => x.toLowerCase());
+    if (cfg ? top.includes(k) : top.some((x) => /mixin/.test(x) && /\.json$/.test(x) && norm(x.split('.')[0]).startsWith(id))) { hit = f; break; }
+  }
+  if (!hit) hit = jars.find((f) => norm(f).startsWith(id)) || null;
+  if (!hit || managed.has(hit.toLowerCase())) return null;
+  return { dir, file: hit, name: cfg ? key.replace(/[-_.]?mixins?\.json$/i, '').replace(/\.json$/i, '') : key };
+}
+let lastCulprit = null;
+
 // error text that leaves the computer (stats) never carries the user's folder, which holds their account name
 function noHome(t) {
   let out = String(t);
@@ -576,7 +621,7 @@ ipcMain.handle('play', async (e, opts) => {
     if (running.stdout) running.stdout.on('data', take);
     if (running.stderr) running.stderr.on('data', take);
     running.on('close', () => { if (out) out.end(); });
-    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1, error: code ? noHome(crashReason(log)).slice(0, 300) : '' }); running = null; presence('menu'); send('game', { running: false, code, log: code ? log : '', why: code ? noHome(crashReason(log)) : '', logFile }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
+    running.on('exit', (code) => { stat({ type: 'end', sid, minutes: Math.round((Date.now() - t0) / 60000), code: typeof code === 'number' ? code : -1, error: code ? noHome(crashReason(log)).slice(0, 300) : '' }); running = null; presence('menu'); const why = code ? noHome(crashReason(log)) : ''; lastCulprit = code ? crashCulprit(prep.instDir, why) : null; if (lastCulprit) Object.assign(lastCulprit, { mc, loader: picked }); send('game', { running: false, code, log: code ? log : '', why, logFile, culprit: lastCulprit ? { file: lastCulprit.file, name: lastCulprit.name } : null }); if (s.closeOnPlay) app.quit(); else if (win) { win.show(); win.focus(); } });
     if (s.closeOnPlay) win.hide();
     return { ok: true };
   } catch (err) {
@@ -632,6 +677,21 @@ ipcMain.handle('modpacks:install', safe(async (e, id) => {
   return Object.assign({ ok: true, switched, mc: v.mc, loader: v.loader, packs: game.modPackState(ROOT, v.mc, v.loader) }, r);
 }));
 ipcMain.handle('modpacks:remove', safe(async (e, id) => { const v = await curVer(); game.removeModPack(ROOT, v.mc, v.loader, String(id)); return { ok: true, packs: game.modPackState(ROOT, v.mc, v.loader) }; }));
+// "Turn off <mod> and play": only the file the last crash pointed at, in that version's own mods folder. A mod installed from
+// the Mods page is removed the normal way (so the page stays right); anything else is renamed to .jar.disabled and can be put back.
+ipcMain.handle('mods:off', safe(async (e, file) => {
+  const c = lastCulprit;
+  if (!c || String(file) !== c.file || path.basename(c.file) !== c.file || !/\.jar$/i.test(c.file)) return { ok: false, error: 'That mod is not there any more.' };
+  const f = path.join(c.dir, c.file);
+  if (!fs.existsSync(f)) return { ok: false, error: 'That mod is not there any more.' };
+  let st = {}; try { st = JSON.parse(fs.readFileSync(path.join(c.dir, '.craftrank-mods.json'), 'utf8')) || {}; } catch (er) {}
+  const pid = Object.keys(st).find((k) => st[k] && st[k].file === c.file);
+  let done = false;
+  if (pid && path.join(game.instanceDir(ROOT, c.mc, c.loader), 'mods') === c.dir) { try { game.removeMod(ROOT, c.mc, c.loader, pid); done = !fs.existsSync(f); } catch (er) {} }
+  if (!done) { let to = f + '.disabled'; if (fs.existsSync(to)) to = f + '.' + Date.now() + '.disabled'; fs.renameSync(f, to); }
+  lastCulprit = null;
+  return { ok: true, name: c.name };
+}));
 ipcMain.handle('mods:folder', async () => { const v = await curVer(); const d = game.modState(ROOT, v.mc, v.loader).dir; fs.mkdirSync(d, { recursive: true }); shell.openPath(d); });
 
 /* my servers */
